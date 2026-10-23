@@ -61,6 +61,15 @@ for (const version of Object.keys(english)) {
     errors.push(`changelog.en.json traduit une version ${version} absente du changelog`);
   }
 }
+// Un gabarit laissé par `npm run bump` : on ne publie jamais des notes à écrire.
+for (const [name, text] of [
+  ['changelog.json', JSON.stringify(changelog.find((e) => e.version === version) ?? {})],
+  ['changelog.en.json', JSON.stringify(english[version] ?? {})],
+]) {
+  if (/À COMPLÉTER|TO COMPLETE/.test(text)) {
+    errors.push(`${name}, version ${version} : les notes contiennent encore « À COMPLÉTER » / « TO COMPLETE »`);
+  }
+}
 const tag = process.argv[2];
 if (tag && tag.replace(/^v/, '') !== version) {
   errors.push(`Le tag ${tag} ne correspond pas à la version ${version}`);

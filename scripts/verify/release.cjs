@@ -78,6 +78,13 @@ const run = (dir, ...args) => spawnSync('node', [path.join(dir, 'scripts/check-r
   const r = run(fixture({}), 'v0.2.0');
   check('mauvais tag : sortie 1', r.status === 1 && /ne correspond pas à la version 0\.1\.0/.test(r.stderr), r.stderr);
 }
+// 5 bis. Un gabarit de `npm run bump` ne part jamais en release.
+{
+  const r = run(fixture({ fr: [{ version: '0.1.0', date: 'd', title: 'À COMPLÉTER', notes: [{ kind: 'new', text: 'x' }] }] }));
+  check('gabarit FR laissé : sortie 1', r.status === 1 && /À COMPLÉTER/.test(r.stderr), r.stderr);
+  const e = run(fixture({ en: { '0.1.0': { title: 'TO COMPLETE', notes: [{ text: 'x' }] } } }));
+  check('gabarit EN laissé : sortie 1', e.status === 1 && /TO COMPLETE/.test(e.stderr), e.stderr);
+}
 // 6. Le dépôt courant, lui, est cohérent.
 {
   const r = spawnSync('node', [path.join(REPO, 'scripts/check-release.cjs')], { encoding: 'utf8' });

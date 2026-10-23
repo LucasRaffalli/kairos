@@ -12,9 +12,10 @@
     "tokens": "node scripts/make-tokens.cjs",
     "release": "bash scripts/release.sh",
     "deploy": "bash scripts/deploy.sh",
-    "verify": "node scripts/verify/tokens.cjs && node scripts/verify/theme.cjs && node scripts/verify/lang.cjs && node scripts/verify/whats-new.cjs && node scripts/verify/release.cjs && node scripts/verify/worker.cjs",
+    "verify": "node scripts/verify/tokens.cjs && node scripts/verify/theme.cjs && node scripts/verify/lang.cjs && node scripts/verify/whats-new.cjs && node scripts/verify/release.cjs && node scripts/verify/bump.cjs && node scripts/verify/worker.cjs",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "bump": "node scripts/bump.cjs"
   },
   "private": true,
   "dependencies": {

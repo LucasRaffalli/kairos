@@ -25,7 +25,8 @@ La conception complète (pourquoi, concept, utilisation, cahier des charges, tec
 ```bash
 npm run dev           # l'app dans la barre de menus (Tauri + Angular)
 npm run build         # build Angular
-npm run verify        # vérifications sur le code compilé (thème, tokens, langues, mises à jour, release, Worker)
+npm run verify        # vérifications sur le code compilé (thème, tokens, langues, mises à jour, release, bump, Worker)
+npm run bump 0.2.0    # monte la version partout + gabarit de changelog FR/EN
 npm run format        # Prettier
 npm run tokens        # régénère _tokens.scss depuis design/tokens.json
 npm run release       # pose le tag de la version courante et le pousse : la CI construit
@@ -51,8 +52,8 @@ Tout vient de Charon ; seuls les noms changent.
 
 ## Publier une version
 
-1. Monter la version aux **trois** endroits (`package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`) et ajouter son entrée dans `src/assets/changelog.json` **et** sa traduction dans `changelog.en.json` (même nombre de notes). `node scripts/check-release.cjs` vérifie tout cela.
-2. `npm run release` : pose le tag `vX.Y.Z` et le pousse. La CI (`release.yml`) construit l'app signée et l'attache à la release GitHub.
+1. `npm run bump 0.2.0` : monte la version aux trois endroits que la CI compare (`package.json`, `tauri.conf.json`, `src-tauri/Cargo.toml`), aligne les deux crates et `Cargo.lock`, et ajoute une entrée **à compléter** dans `src/assets/changelog.json` (français) et `changelog.en.json` (anglais). Écris les notes ; tant qu'il reste « À COMPLÉTER », la release est refusée.
+2. Commit, puis `npm run release`. Il vérifie avant de tagger : sur `main`, arbre propre, pas en retard sur `origin`, versions et changelog cohérents, format, `npm run verify`, clippy et tests. Puis il pose le tag `vX.Y.Z` et le pousse : la CI (`release.yml`) construit l'app signée et l'attache à la release GitHub. `DRY_RUN=1 npm run release` fait toutes les vérifications sans tagger ni pousser.
 3. Quand le job est vert : `npm run deploy`. Il récupère les artefacts, génère `latest.json`, met à jour le tap Homebrew et envoie le tout dans le bucket R2.
 
 Une seule fois sur la machine : `cp scripts/deploy.env.example scripts/deploy.env` et `npx wrangler login`.
