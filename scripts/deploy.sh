@@ -120,13 +120,23 @@ fi
 # automatiques du tap s'il a changé.
 "$HERE/make-cask.sh"
 TAP_DIR="${TAP_DIR:-$ROOT/../homebrew-kairos}"
-if [ -d "$TAP_DIR/.git" ] && [ -n "$(git -C "$TAP_DIR" status --porcelain)" ]; then
-  git -C "$TAP_DIR" add -A
-  git -C "$TAP_DIR" commit -m "kairos $VERSION"
-  if git -C "$TAP_DIR" push; then
-    echo "✓ Tap Homebrew poussé (kairos $VERSION)."
+# Chemin absolu, sans « .. » : git se lance DEPUIS le tap (cd), pas avec -C.
+TAP_DIR="$(cd "$TAP_DIR" 2>/dev/null && pwd || echo "$TAP_DIR")"
+if [ -d "$TAP_DIR/.git" ]; then
+  # Une erreur ici ne doit JAMAIS passer sous silence : sans cask à jour, brew
+  # installerait l'ancienne version (c'est ce qui s'est passé à la 0.1.0 : un
+  # git qui échouait dans une substitution était pris pour « rien à pousser »).
+  if ! TAP_CHANGES="$(cd "$TAP_DIR" && git status --porcelain)"; then
+    echo "⚠ Tap illisible ($TAP_DIR) — cask générée mais pas publiée. À faire à la main :" >&2
+    echo "  cd \"$TAP_DIR\" && git add -A && git commit -m \"kairos $VERSION\" && git push" >&2
+  elif [ -n "$TAP_CHANGES" ]; then
+    if (cd "$TAP_DIR" && git add -A && git commit -q -m "kairos $VERSION" && git push -q); then
+      echo "✓ Tap Homebrew poussé (kairos $VERSION)."
+    else
+      echo "⚠ Publication du tap impossible — à faire à la main : cd \"$TAP_DIR\" && git push" >&2
+    fi
   else
-    echo "⚠ Push du tap impossible — à faire à la main : cd \"$TAP_DIR\" && git push" >&2
+    echo "(tap Homebrew déjà à jour)"
   fi
 fi
 
