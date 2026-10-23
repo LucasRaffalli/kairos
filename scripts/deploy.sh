@@ -46,7 +46,7 @@ mkdir -p "$ROOT/dist-macos"
 RELEASE_JSON_FILE="$(mktemp)"
 export RELEASE_JSON_FILE
 trap 'rm -f "$RELEASE_JSON_FILE"' EXIT
-curl -fsSL "${CURL_AUTH[@]}" "https://api.github.com/repos/LucasRaffalli/kairos/releases/tags/$TAG" \
+curl -fsSL ${CURL_AUTH[@]+"${CURL_AUTH[@]}"} "https://api.github.com/repos/LucasRaffalli/kairos/releases/tags/$TAG" \
   -o "$RELEASE_JSON_FILE" 2>/dev/null || true
 
 # Téléchargement d'UN asset de la release PAR SON NOM : true/false.
@@ -69,7 +69,7 @@ for a in data.get('assets', []):
         print(a['id']); break
 " || true)"
   [ -n "$id" ] || return 1
-  curl -fsSL "${CURL_AUTH[@]}" -H "Accept: application/octet-stream" -o "$dest" \
+  curl -fsSL ${CURL_AUTH[@]+"${CURL_AUTH[@]}"} -H "Accept: application/octet-stream" -o "$dest" \
     "https://api.github.com/repos/LucasRaffalli/kairos/releases/assets/$id" 2>/dev/null
 }
 
