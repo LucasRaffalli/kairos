@@ -70,6 +70,7 @@ open ──close_day──▶ closed ──mark_declared──▶ declared
 - `close_day` : refusée si la journée n'est plus ouverte, ou si un lot est en cours (le message propose `--stop` qui l'arrête d'abord). Fige les totaux (`closed_totals`).
 - `mark_declared` : refusée sur une journée ouverte (« clôture d'abord »). Fige `declared_totals`.
 - Une entrée ajoutée, modifiée ou supprimée sur une journée `declared` la passe à `to_redeclare` ; sur une journée `closed`, elle reste `closed` et ses totaux figés sont recalculés ; sur une journée `open`, rien ne change d'état.
+- Une journée **sans ligne** dans `days` est `open` : la ligne n'est créée qu'à la première clôture. `close_day` sur une date sans aucune entrée est refusée (`day_empty`), sans créer de ligne.
 - Un `report` sur `to_redeclare` renvoie aussi la liste des changements (`Front 2 h 10 → 2 h 25`) calculée entre `declared_totals` et la réalité.
 
 ## Ventilation, recoupement et texte à saisir
@@ -113,7 +114,7 @@ Chaque erreur a un `code` stable et un message français qui explique **quoi fai
 - `crosses_midnight` : « Cette entrée traverse minuit : scinde-la en deux, une par jour. »
 - `reference_missing` : « Il faut un ID Monday ou un nom de tâche. »
 - `invalid_monday_id` : « L'ID Monday s'écrit avec des chiffres seulement (par exemple 12406850311). »
-- `day_not_open`, `day_not_closed`, `running_lot_on_close`, `entry_not_found`, `nothing_to_resume`, `invalid_setting`.
+- `day_not_open`, `day_not_closed`, `day_empty`, `running_lot_on_close`, `entry_not_found`, `nothing_to_resume`, `invalid_setting`.
 - `db_newer` : « Cette base a été créée par une version plus récente de Kairos : mets Kairos à jour. » (`user_version` supérieur à celui connu : on n'écrit jamais dedans.)
 - `db_unavailable` : « La base est verrouillée par un autre processus depuis plus de 5 secondes. » (`busy_timeout` dépassé.)
 
