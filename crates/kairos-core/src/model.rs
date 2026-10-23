@@ -159,6 +159,64 @@ pub enum Status {
     },
 }
 
+/// Un temps ajouté après coup.
+#[derive(Debug, Clone, Default)]
+pub struct AddEntry {
+    pub parent_monday_id: Option<String>,
+    pub parent_label: Option<String>,
+    pub name: Option<String>,
+    pub subtask: Option<String>,
+    pub from: i64,
+    pub to: i64,
+}
+
+/// Ce qu'on corrige sur une entrée ; ce qui est vide ne change pas.
+#[derive(Debug, Clone, Default)]
+pub struct EditEntry {
+    pub from: Option<i64>,
+    pub to: Option<i64>,
+    pub parent_monday_id: Option<String>,
+    pub name: Option<String>,
+    pub subtask: Option<String>,
+}
+
+/// Une entrée avec son lot, pour l'affichage d'une journée.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct EntryView {
+    pub id: i64,
+    pub lot: LotView,
+    pub start: i64,
+    pub end: Option<i64>,
+    pub removed: bool,
+}
+
+/// Une journée : ses entrées, ses bornes et son total.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DayView {
+    pub date: String,
+    pub status: DayStatus,
+    pub entries: Vec<EntryView>,
+    pub start: Option<i64>,
+    pub end: Option<i64>,
+    /// Somme des trous entre deux entrées.
+    pub pauses: i64,
+    /// Somme des durées des entrées non retirées.
+    pub total: i64,
+}
+
+/// Les secondes par parent (ID Monday, ou « sans ID ») puis par sous-tâche.
+pub type Totals = std::collections::BTreeMap<String, std::collections::BTreeMap<String, i64>>;
+
+/// L'état d'une journée après une clôture ou une saisie.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Day {
+    pub date: String,
+    pub status: DayStatus,
+    pub closed_at: Option<i64>,
+    pub declared_at: Option<i64>,
+    pub totals: Totals,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

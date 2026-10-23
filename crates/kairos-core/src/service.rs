@@ -6,7 +6,10 @@ use rusqlite::{params, OptionalExtension, Transaction, TransactionBehavior};
 use crate::clock::Clock;
 use crate::db::Db;
 use crate::error::{Error, Result};
-use crate::model::{Entry, LotView, StartArgs, StartedLot, Status, StoppedEntry, SwitchResult};
+use crate::model::{
+    AddEntry, Day, DayStatus, DayView, EditEntry, Entry, EntryView, LotView, StartArgs, StartedLot,
+    Status, StoppedEntry, SwitchResult, Totals,
+};
 use crate::timeline::{self, Interval};
 
 /// Longueur maximale d'un nom (tâche, sous-tâche, libellé).
@@ -153,6 +156,174 @@ impl<C: Clock> Kairos<C> {
             Ok(Status::Idle)
         })
     }
+
+    /// Ajoute un temps oublié, après coup.
+    pub fn add_entry(&self, add: AddEntry) -> Result<Entry> {
+        self.with_tx(|ctx| {
+            let reference = resolve(&StartArgs {
+                parent_monday_id: add.parent_monday_id,
+                parent_label: add.parent_label,
+                name: add.name,
+                subtask: add.subtask,
+                ..StartArgs::default()
+            })?;
+            check_range(ctx, add.from, add.to, None)?;
+            let lot_id = ensure_lot(ctx, &reference, crate::model::Source::Manual)?;
+            ctx.tx.execute(
+                "INSERT INTO entries (lot_id, start_at, end_at) VALUES (?1, ?2, ?3)",
+                params![lot_id, add.from, add.to],
+            )?;
+            let id = ctx.tx.last_insert_rowid();
+            touch_day(ctx, &timeline::local_date(add.from, ctx.offset))?;
+            entry_by_id(ctx, id)
+        })
+    }
+
+    /// Corrige une entrée : mêmes règles qu'à l'ajout, et la journée repasse « à resaisir » si elle était saisie.
+    pub fn edit_entry(&self, id: i64, edit: EditEntry) -> Result<Entry> {
+        self.with_tx(|ctx| {
+            let entry = entry_by_id(ctx, id)?;
+            let from = edit.from.unwrap_or(entry.start);
+            let to = edit.to.or(entry.end);
+            check_range(ctx, from, to.unwrap_or(ctx.now), Some(id))?;
+            let mut lot_id = entry.lot_id;
+            if edit.parent_monday_id.is_some() || edit.name.is_some() || edit.subtask.is_some() {
+                let current = lot_view(ctx, entry.lot_id)?;
+                let reference = resolve(&StartArgs {
+                    parent_monday_id: edit.parent_monday_id.or(current.parent_monday_id),
+                    name: edit.name.or(current.name),
+                    subtask: edit.subtask.or(current.subtask),
+                    ..StartArgs::default()
+                })?;
+                lot_id = ensure_lot(ctx, &reference, crate::model::Source::Manual)?;
+            }
+            ctx.tx.execute(
+                "UPDATE entries SET lot_id = ?1, start_at = ?2, end_at = ?3 WHERE id = ?4",
+                params![lot_id, from, to, id],
+            )?;
+            touch_day(ctx, &timeline::local_date(entry.start, ctx.offset))?;
+            touch_day(ctx, &timeline::local_date(from, ctx.offset))?;
+            entry_by_id(ctx, id)
+        })
+    }
+
+    pub fn delete_entry(&self, id: i64) -> Result<()> {
+        self.with_tx(|ctx| {
+            let entry = entry_by_id(ctx, id)?;
+            ctx.tx.execute("DELETE FROM entries WHERE id = ?1", [id])?;
+            touch_day(ctx, &timeline::local_date(entry.start, ctx.offset))
+        })
+    }
+
+    /// Les entrées d'une journée (aujourd'hui par défaut), leurs bornes et leur total.
+    pub fn today(&self, date: Option<&str>) -> Result<DayView> {
+        self.with_tx(|ctx| {
+            let date = date_or_today(ctx, date)?;
+            day_view(ctx, &date)
+        })
+    }
+
+    /// Clôture une journée : fige ses totaux. Refusée si un lot y tourne encore, sauf `stop_running`.
+    pub fn close_day(&self, date: Option<&str>, stop_running: bool) -> Result<Day> {
+        self.with_tx(|ctx| {
+            let date = date_or_today(ctx, date)?;
+            let bounds = timeline::day_bounds(&date, ctx.offset)?;
+            if stored_status(ctx, &date)? != DayStatus::Open {
+                return Err(Error::DayNotOpen(date));
+            }
+            let entries: i64 = ctx.tx.query_row("SELECT COUNT(*) FROM entries WHERE removed = 0 AND start_at >= ?1 AND start_at < ?2", [bounds.start, bounds.end], |r| r.get(0))?;
+            if entries == 0 {
+                return Err(Error::DayEmpty(date));
+            }
+            if let Some((_, lot_id, start)) = open_entry(ctx)? {
+                if start >= bounds.start && start < bounds.end {
+                    if !stop_running {
+                        return Err(Error::RunningLotOnClose(lot_view(ctx, lot_id)?.describe()));
+                    }
+                    close_open(ctx, None)?;
+                }
+            }
+            let totals = totals(ctx, &date)?;
+            ctx.tx.execute(
+                "INSERT INTO days (date, status, closed_at, closed_totals) VALUES (?1, 'closed', ?2, ?3) ON CONFLICT(date) DO UPDATE SET status = 'closed', closed_at = ?2, closed_totals = ?3",
+                params![date, ctx.now, totals_json(&totals)],
+            )?;
+            day_row(ctx, &date)
+        })
+    }
+
+    /// Note que l'utilisateur a saisi la journée dans Monday.
+    pub fn mark_declared(&self, date: Option<&str>) -> Result<Day> {
+        self.with_tx(|ctx| {
+            let date = date_or_today(ctx, date)?;
+            match stored_status(ctx, &date)? {
+                DayStatus::Open => return Err(Error::DayNotClosed(date)),
+                DayStatus::Declared => return day_row(ctx, &date),
+                DayStatus::Closed | DayStatus::ToRedeclare => {}
+            }
+            let totals = totals(ctx, &date)?;
+            ctx.tx.execute("UPDATE days SET status = 'declared', declared_at = ?1, declared_totals = ?2 WHERE date = ?3", params![ctx.now, totals_json(&totals), date])?;
+            day_row(ctx, &date)
+        })
+    }
+
+    /// Mémorise l'ID Monday d'une sous-tâche d'un parent, collé à la main.
+    pub fn set_subtask_id(
+        &self,
+        parent_monday_id: &str,
+        subtask: &str,
+        monday_item_id: &str,
+    ) -> Result<()> {
+        self.with_tx(|ctx| {
+            let parent = clean_monday_id(&Some(parent_monday_id.to_string()))?
+                .ok_or_else(|| Error::InvalidMondayId(parent_monday_id.to_string()))?;
+            let item = clean_monday_id(&Some(monday_item_id.to_string()))?
+                .ok_or_else(|| Error::InvalidMondayId(monday_item_id.to_string()))?;
+            let name = clean_text(&Some(subtask.to_string()), "La sous-tâche")?
+                .ok_or_else(|| Error::InvalidName("la sous-tâche est vide".into()))?;
+            let project = default_project(ctx)?;
+            let parent_row = ensure_parent(ctx, project, &parent, None)?;
+            let row = own_subtask(ctx, project, parent_row, &name)?;
+            ctx.tx.execute(
+                "UPDATE subtasks SET monday_item_id = ?1 WHERE id = ?2",
+                params![item, row],
+            )?;
+            Ok(())
+        })
+    }
+
+    pub fn config_get(&self, key: &str) -> Result<String> {
+        self.with_tx(|ctx| {
+            check_setting_key(key)?;
+            Ok(ctx
+                .tx
+                .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+                    r.get(0)
+                })?)
+        })
+    }
+
+    pub fn config_set(&self, key: &str, value: &str) -> Result<()> {
+        self.with_tx(|ctx| {
+            check_setting_key(key)?;
+            let value = match key {
+                "rounding_minutes" if ["0", "5", "10", "15"].contains(&value) => value.to_string(),
+                "rounding_minutes" => {
+                    return Err(Error::InvalidSetting(format!(
+                        "rounding_minutes vaut 0, 5, 10 ou 15 (reçu « {value} »)"
+                    )))
+                }
+                _ => clean_text(&Some(value.to_string()), "Le poste principal")?.ok_or_else(
+                    || Error::InvalidSetting("main_subtask ne peut pas être vide".into()),
+                )?,
+            };
+            ctx.tx.execute(
+                "UPDATE settings SET value = ?1 WHERE key = ?2",
+                params![value, key],
+            )?;
+            Ok(())
+        })
+    }
 }
 
 // --- Lots -------------------------------------------------------------------
@@ -225,31 +396,12 @@ fn ensure_lot(ctx: &Ctx, r: &Reference, source: crate::model::Source) -> Result<
     let project = default_project(ctx)?;
 
     let parent_row: Option<i64> = match &r.parent_monday_id {
-        Some(monday_id) => {
-            let existing: Option<i64> = ctx
-                .tx
-                .query_row(
-                    "SELECT id FROM parents WHERE project_id = ?1 AND monday_id = ?2",
-                    params![project, monday_id],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            let id = match existing {
-                Some(id) => id,
-                None => {
-                    ctx.tx.execute(
-                        "INSERT INTO parents (project_id, monday_id) VALUES (?1, ?2)",
-                        params![project, monday_id],
-                    )?;
-                    ctx.tx.last_insert_rowid()
-                }
-            };
-            ctx.tx.execute(
-                "UPDATE parents SET last_seen = ?1, label = COALESCE(?2, label) WHERE id = ?3",
-                params![ctx.now, r.parent_label, id],
-            )?;
-            Some(id)
-        }
+        Some(monday_id) => Some(ensure_parent(
+            ctx,
+            project,
+            monday_id,
+            r.parent_label.as_deref(),
+        )?),
         None => None,
     };
 
@@ -267,12 +419,25 @@ fn ensure_lot(ctx: &Ctx, r: &Reference, source: crate::model::Source) -> Result<
         Some(name) => Some(ensure_subtask(ctx, project, parent_row, &name)?),
         None => None,
     };
-    if let (Some(item), Some(id)) = (&r.subtask_monday_id, subtask_row) {
-        ctx.tx.execute(
-            "UPDATE subtasks SET monday_item_id = ?1 WHERE id = ?2",
-            params![item, id],
-        )?;
-    }
+    // L'ID Monday d'une sous-tâche est propre à son parent, même pour une sous-tâche de base.
+    let subtask_row = match (&r.subtask_monday_id, parent_row, subtask_row) {
+        (Some(item), Some(parent), Some(shared)) => {
+            let own = own_subtask(ctx, project, parent, &subtask_name_of(ctx, shared)?)?;
+            ctx.tx.execute(
+                "UPDATE subtasks SET monday_item_id = ?1 WHERE id = ?2",
+                params![item, own],
+            )?;
+            Some(own)
+        }
+        (Some(item), None, Some(id)) => {
+            ctx.tx.execute(
+                "UPDATE subtasks SET monday_item_id = ?1 WHERE id = ?2",
+                params![item, id],
+            )?;
+            Some(id)
+        }
+        _ => subtask_row,
+    };
 
     let existing: Option<i64> = ctx
         .tx
@@ -289,19 +454,36 @@ fn ensure_lot(ctx: &Ctx, r: &Reference, source: crate::model::Source) -> Result<
     Ok(ctx.tx.last_insert_rowid())
 }
 
-/// Une sous-tâche de base du même nom est partagée ; sinon elle est propre au parent.
-fn ensure_subtask(ctx: &Ctx, project: i64, parent: Option<i64>, name: &str) -> Result<i64> {
-    let shared: Option<i64> = ctx
+/// Trouve ou crée un parent par son ID Monday ; mémorise son libellé et la dernière fois qu'on l'a vu.
+fn ensure_parent(ctx: &Ctx, project: i64, monday_id: &str, label: Option<&str>) -> Result<i64> {
+    let existing: Option<i64> = ctx
         .tx
         .query_row(
-            "SELECT id FROM subtasks WHERE project_id = ?1 AND parent_id IS NULL AND name = ?2",
-            params![project, name],
+            "SELECT id FROM parents WHERE project_id = ?1 AND monday_id = ?2",
+            params![project, monday_id],
             |row| row.get(0),
         )
         .optional()?;
-    if let Some(id) = shared {
-        return Ok(id);
-    }
+    let id = match existing {
+        Some(id) => id,
+        None => {
+            ctx.tx.execute(
+                "INSERT INTO parents (project_id, monday_id) VALUES (?1, ?2)",
+                params![project, monday_id],
+            )?;
+            ctx.tx.last_insert_rowid()
+        }
+    };
+    ctx.tx.execute(
+        "UPDATE parents SET last_seen = ?1, label = COALESCE(?2, label) WHERE id = ?3",
+        params![ctx.now, label, id],
+    )?;
+    Ok(id)
+}
+
+/// La sous-tâche d'un lot : celle du parent si elle existe, sinon la sous-tâche de base du même
+/// nom (partagée), sinon une nouvelle, propre à ce parent.
+fn ensure_subtask(ctx: &Ctx, project: i64, parent: Option<i64>, name: &str) -> Result<i64> {
     if let Some(parent) = parent {
         let own: Option<i64> = ctx
             .tx
@@ -315,11 +497,51 @@ fn ensure_subtask(ctx: &Ctx, project: i64, parent: Option<i64>, name: &str) -> R
             return Ok(id);
         }
     }
+    let shared: Option<i64> = ctx
+        .tx
+        .query_row(
+            "SELECT id FROM subtasks WHERE project_id = ?1 AND parent_id IS NULL AND name = ?2",
+            params![project, name],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if let Some(id) = shared {
+        return Ok(id);
+    }
     ctx.tx.execute(
         "INSERT INTO subtasks (project_id, parent_id, name, is_base) VALUES (?1, ?2, ?3, 0)",
         params![project, parent, name],
     )?;
     Ok(ctx.tx.last_insert_rowid())
+}
+
+/// La sous-tâche **propre** à un parent (créée au besoin, même si une sous-tâche de base porte ce nom) :
+/// c'est elle qui porte l'ID Monday, différent d'un parent à l'autre.
+fn own_subtask(ctx: &Ctx, project: i64, parent: i64, name: &str) -> Result<i64> {
+    let own: Option<i64> = ctx
+        .tx
+        .query_row(
+            "SELECT id FROM subtasks WHERE project_id = ?1 AND parent_id = ?2 AND name = ?3",
+            params![project, parent, name],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if let Some(id) = own {
+        return Ok(id);
+    }
+    ctx.tx.execute(
+        "INSERT INTO subtasks (project_id, parent_id, name, is_base) VALUES (?1, ?2, ?3, 0)",
+        params![project, parent, name],
+    )?;
+    Ok(ctx.tx.last_insert_rowid())
+}
+
+fn subtask_name_of(ctx: &Ctx, id: i64) -> Result<String> {
+    Ok(ctx
+        .tx
+        .query_row("SELECT name FROM subtasks WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })?)
 }
 
 fn lot_view(ctx: &Ctx, lot_id: i64) -> Result<LotView> {
@@ -458,6 +680,7 @@ fn start_in(ctx: &Ctx, args: &StartArgs) -> Result<StartedLot> {
     let lot_id = ensure_lot(ctx, &reference, args.source)?;
     let entry_id = insert_open_entry(ctx, lot_id, at)?;
     clear_pause(ctx)?;
+    touch_day(ctx, &timeline::local_date(at, ctx.offset))?;
     // Un lancement en retard peut traverser un minuit : on coupe tout de suite.
     reconcile(ctx)?;
     let entry = match open_entry(ctx)? {
@@ -532,4 +755,190 @@ fn day_total(ctx: &Ctx, date: &str) -> Result<i64> {
         total += (end - start.max(day.start)).max(0);
     }
     Ok(total)
+}
+
+// --- Journées ---------------------------------------------------------------
+
+fn date_or_today(ctx: &Ctx, date: Option<&str>) -> Result<String> {
+    match date {
+        Some(d) => {
+            timeline::day_bounds(d, ctx.offset)?;
+            Ok(d.to_string())
+        }
+        None => Ok(timeline::local_date(ctx.now, ctx.offset)),
+    }
+}
+
+fn stored_status(ctx: &Ctx, date: &str) -> Result<DayStatus> {
+    let text: Option<String> = ctx
+        .tx
+        .query_row("SELECT status FROM days WHERE date = ?1", [date], |r| {
+            r.get(0)
+        })
+        .optional()?;
+    Ok(text
+        .as_deref()
+        .and_then(DayStatus::parse)
+        .unwrap_or(DayStatus::Open))
+}
+
+fn totals_json(totals: &Totals) -> String {
+    serde_json::to_string(totals).expect("des totaux se sérialisent toujours")
+}
+
+fn day_row(ctx: &Ctx, date: &str) -> Result<Day> {
+    let (closed_at, declared_at): (Option<i64>, Option<i64>) = ctx
+        .tx
+        .query_row(
+            "SELECT closed_at, declared_at FROM days WHERE date = ?1",
+            [date],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?
+        .unwrap_or((None, None));
+    Ok(Day {
+        date: date.to_string(),
+        status: stored_status(ctx, date)?,
+        closed_at,
+        declared_at,
+        totals: totals(ctx, date)?,
+    })
+}
+
+/// Une entrée ajoutée, modifiée ou supprimée sur une journée figée la fait réagir : une journée
+/// saisie repasse « à resaisir » ; une journée clôturée reste clôturée mais ses totaux se rafraîchissent.
+fn touch_day(ctx: &Ctx, date: &str) -> Result<()> {
+    match stored_status(ctx, date)? {
+        DayStatus::Declared => {
+            ctx.tx.execute(
+                "UPDATE days SET status = 'to_redeclare' WHERE date = ?1",
+                [date],
+            )?;
+        }
+        DayStatus::Closed => {
+            let totals = totals(ctx, date)?;
+            ctx.tx.execute(
+                "UPDATE days SET closed_totals = ?1 WHERE date = ?2",
+                params![totals_json(&totals), date],
+            )?;
+        }
+        DayStatus::Open | DayStatus::ToRedeclare => {}
+    }
+    Ok(())
+}
+
+/// Les règles communes à un ajout et à une modification : de la durée, pas de futur, pas de minuit
+/// traversé, pas de chevauchement. L'entrée `except` (celle qu'on modifie) ne compte pas contre elle-même.
+fn check_range(ctx: &Ctx, from: i64, to: i64, except: Option<i64>) -> Result<()> {
+    if to <= from {
+        return Err(Error::EmptyEntry);
+    }
+    if to > ctx.now {
+        return Err(Error::InFuture {
+            at: fmt_hm(ctx, to),
+            now: fmt_hm(ctx, ctx.now),
+        });
+    }
+    if !timeline::midnights_between(from, to - 1, ctx.offset).is_empty() {
+        return Err(Error::CrossesMidnight);
+    }
+    let clash: Option<(i64, Option<i64>, i64)> = ctx
+        .tx
+        .query_row(
+            "SELECT start_at, end_at, lot_id FROM entries WHERE removed = 0 AND id != ?4 AND start_at < ?2 AND COALESCE(end_at, ?3) > ?1 ORDER BY start_at LIMIT 1",
+            params![from, to, ctx.now, except.unwrap_or(-1)],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?;
+    if let Some((start, end, lot_id)) = clash {
+        return Err(Error::Overlap {
+            with: format!(
+                "{} – {} sur {}",
+                fmt_hm(ctx, start),
+                fmt_hm(ctx, end.unwrap_or(ctx.now)),
+                lot_view(ctx, lot_id)?.target()
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// Les entrées d'un jour local (une entrée ne traverse jamais minuit : son début suffit à la placer).
+fn day_entries(ctx: &Ctx, date: &str) -> Result<Vec<(Entry, LotView)>> {
+    let bounds = timeline::day_bounds(date, ctx.offset)?;
+    let mut stmt = ctx.tx.prepare("SELECT id, lot_id, start_at, end_at, removed, note FROM entries WHERE start_at >= ?1 AND start_at < ?2 ORDER BY start_at, id")?;
+    let entries = stmt
+        .query_map([bounds.start, bounds.end], row_to_entry)?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    entries
+        .into_iter()
+        .map(|e| Ok((e.clone(), lot_view(ctx, e.lot_id)?)))
+        .collect()
+}
+
+fn day_view(ctx: &Ctx, date: &str) -> Result<DayView> {
+    let rows = day_entries(ctx, date)?;
+    let live: Vec<&Entry> = rows.iter().map(|(e, _)| e).filter(|e| !e.removed).collect();
+    let end_of = |e: &Entry| e.end.unwrap_or(ctx.now);
+    let start = live.first().map(|e| e.start);
+    let end = live.last().map(|e| end_of(e));
+    let pauses = live
+        .windows(2)
+        .map(|w| (w[1].start - end_of(w[0])).max(0))
+        .sum();
+    let total = live.iter().map(|e| end_of(e) - e.start).sum();
+    let entries = rows
+        .into_iter()
+        .map(|(e, lot)| EntryView {
+            id: e.id,
+            lot,
+            start: e.start,
+            end: e.end,
+            removed: e.removed,
+        })
+        .collect();
+    Ok(DayView {
+        date: date.to_string(),
+        status: stored_status(ctx, date)?,
+        entries,
+        start,
+        end,
+        pauses,
+        total,
+    })
+}
+
+/// Les secondes par parent puis par sous-tâche (les lots sans ID Monday sont regroupés sous « sans ID »).
+fn totals(ctx: &Ctx, date: &str) -> Result<Totals> {
+    let mut totals = Totals::new();
+    for (entry, lot) in day_entries(ctx, date)?
+        .into_iter()
+        .filter(|(e, _)| !e.removed)
+    {
+        let (parent, sub) = match &lot.parent_monday_id {
+            Some(id) => (
+                id.clone(),
+                lot.subtask.clone().unwrap_or_else(|| "?".into()),
+            ),
+            None => (
+                "sans ID".to_string(),
+                lot.name
+                    .clone()
+                    .or(lot.subtask.clone())
+                    .unwrap_or_else(|| "?".into()),
+            ),
+        };
+        *totals.entry(parent).or_default().entry(sub).or_insert(0) +=
+            entry.end.unwrap_or(ctx.now) - entry.start;
+    }
+    Ok(totals)
+}
+
+fn check_setting_key(key: &str) -> Result<()> {
+    match key {
+        "main_subtask" | "rounding_minutes" => Ok(()),
+        other => Err(Error::InvalidSetting(format!(
+            "clé inconnue « {other} » (main_subtask ou rounding_minutes)"
+        ))),
+    }
 }
