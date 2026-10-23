@@ -36,10 +36,12 @@
 ### Task 1: Workspace Cargo, `kairos-core`, `kairos-cli`, git
 
 **Files:**
+
 - Create: `Cargo.toml`, `rust-toolchain.toml`, `crates/kairos-core/Cargo.toml`, `crates/kairos-core/src/lib.rs`, `crates/kairos-cli/Cargo.toml`, `crates/kairos-cli/src/main.rs`, `crates/kairos-cli/tests/version.rs`, `.gitignore`
 - Run: `git init -b main`, `git remote add origin https://github.com/LucasRaffalli/kairos.git`
 
 **Interfaces:**
+
 - Produces: `kairos_core::version() -> &'static str` (renvoie `env!("CARGO_PKG_VERSION")`) ; binaire `kairos` avec la sous-commande `version` qui écrit `kairos 0.1.0` sur stdout.
 
 - [ ] **Step 1:** `git init -b main` et ajouter le remote. Copier `.gitignore` de Charon (`~/Documents/charon/.gitignore`) en retirant ses lignes propres à Charon (`/samples`, `/docs/mockups`, `/dist-windows`) et en gardant `/dist`, `/dist-macos`, `latest.json`, `scripts/deploy.env`, `target/`.
@@ -52,10 +54,12 @@
 ### Task 2: Projet Angular, tokens, thème et accent
 
 **Files:**
+
 - Create: `package.json`, `angular.json`, `tsconfig.json`, `tsconfig.app.json`, `.prettierrc.json`, `.prettierignore`, `src/index.html`, `src/main.ts`, `src/app/app.config.ts`, `src/app/app.ts`, `src/app/interfaces/appearance/accent.ts`, `src/app/services/appearance/theme.service.ts`, `src/app/services/appearance/secret-accent.service.ts`, `src/styles/_tokens.scss`, `src/styles/styles.scss`, `scripts/verify/tokens.cjs`, `scripts/verify/theme.cjs`
 - Reference: `~/Documents/charon/package.json`, `angular.json`, `tsconfig*.json`, `.prettierrc.json`, `src/app/services/appearance/theme.service.ts`, `secret-accent.service.ts`, `src/app/interfaces/appearance/accent.ts`
 
 **Interfaces:**
+
 - Produces: `ACCENTS = ['kairos','charon','jade','unloved','unicorn'] as const`, `type Accent`, `isAccent(value: string | null): value is Accent` ; `ThemeService` avec `preference`, `accent`, `theme` (signaux en lecture seule, `theme()` jamais `'auto'`), `select(theme: ThemePreference)`, `selectAccent(accent: Accent)` (refuse `unicorn` tant qu'il n'est pas trouvé), `activateSecretAccent()`, stockage `kairos:theme`, `kairos:accent`, `kairos:secrets`. `ThemePreference = 'auto' | 'light' | 'dark' | 'contrast'`.
 
 - [ ] **Step 1:** Écrire `scripts/verify/theme.cjs` (modèle : `~/Documents/charon/scripts/verify/theme.cjs`) : charge `theme.service.ts` transpilé et affirme (a) `theme()` vaut `'dark'` ou `'light'` quand la préférence est `'auto'`, jamais `'auto'` ; (b) `selectAccent('unicorn')` est sans effet avant `activateSecretAccent()` puis fonctionne ; (c) un accent caché trouvé survit à un changement d'accent. Écrire `scripts/verify/tokens.cjs` : lit `_tokens.scss`, collecte les variables `var(--…)` utilisées dans `src/**/*.scss` et affirme que chacune est définie pour `[data-theme='dark'|'light'|'contrast']` et pour chaque `[data-accent]`.
@@ -69,11 +73,13 @@
 ### Task 3: Popover vide et i18n
 
 **Files:**
+
 - Create: `src/app/features/popover/popover.ts`, `popover.html`, `popover.scss`, `src/app/lang/i18n.service.ts`, `src/app/lang/fr.ts`, `src/app/lang/en.ts`, `src/assets/glyph.svg`
 - Modify: `src/app/app.ts`, `src/app/app.html`
 - Reference: `~/Documents/charon/src/app/lang/i18n.service.ts`
 
 **Interfaces:**
+
 - Consumes: `ThemeService` (tâche 2).
 - Produces: `injectT(): (key: TranslationKey) => string` ; clés `popover.title` (« Kairos »), `popover.empty` (« Rien en cours »), `popover.date` formaté avec la langue courante ; composant `Popover` (OnPush) : en-tête (glyphe, « Kairos », date du jour) sur `--color-bg-popover`, largeur 340 px.
 
@@ -85,11 +91,13 @@
 ### Task 4: Coquille Tauri, icône de barre de menus et popover
 
 **Files:**
+
 - Create: `src-tauri/Cargo.toml` (crate `kairos-app`, lib `kairos_lib`), `src-tauri/build.rs`, `src-tauri/src/main.rs`, `src-tauri/src/lib.rs`, `src-tauri/src/tray.rs`, `src-tauri/src/placement.rs`, `src-tauri/tauri.conf.json`, `src-tauri/tauri.dev.conf.json`, `src-tauri/tauri.release.conf.json`, `src-tauri/capabilities/default.json`, `src-tauri/icons/` (générées)
 - Modify: `Cargo.toml` (remettre `src-tauri` dans `members`)
 - Reference: `~/Documents/charon/src-tauri/Cargo.toml`, `tauri.conf.json`, `tauri.release.conf.json`
 
 **Interfaces:**
+
 - Produces: `placement::popover_position(tray: Rect, popover: Size, screen: Rect) -> Point` (centré sous l'icône, ramené dans l'écran avec 8 px de marge) ; `tray::toggle_action(visible: bool, just_blurred: bool) -> ToggleAction` avec `enum ToggleAction { Show, Hide }` : `Hide` si le popover est visible, `Show` sinon, sauf si `just_blurred` (perte de focus de moins de 250 ms causée par ce même clic) qui donne `Hide`.
 
 - [ ] **Step 1:** Écrire les tests unitaires : `popover_position` (a) centré quand tout tient, (b) ramené à gauche quand l'icône est au bord droit, (c) ramené sur le deuxième écran, jamais au-dessus du bord haut ; `toggle_action` (visible → Hide ; caché → Show ; caché + `just_blurred` → Hide).
@@ -101,10 +109,12 @@
 ### Task 5: Mises à jour dans l'app et changelog
 
 **Files:**
+
 - Create: `src/app/services/system/updater.service.ts`, `whats-new.service.ts`, `changelog-i18n.ts`, `src/assets/changelog.json`, `src/assets/changelog.en.json`
 - Reference: `~/Documents/charon/src/app/services/system/updater.service.ts`, `whats-new.service.ts`, `changelog-i18n.ts`
 
 **Interfaces:**
+
 - Produces: `UpdaterService.check(): Promise<UpdateStatus>` avec `type UpdateStatus = { kind: 'none' } | { kind: 'available'; version: string } | { kind: 'error'; message: string }` (ne lève jamais), `install(): Promise<void>` ; `WhatsNewService.entries(): ChangelogEntry[]` triées de la plus récente ; changelog `0.1.0` (« Le socle ») en FR et EN, une note chacune.
 
 - [ ] **Step 1:** Test `scripts/verify/whats-new.cjs` (modèle Charon) : `check()` rend `{ kind: 'error' }` et ne lève pas quand le plugin échoue ; `entries()` est triée ; chaque version du FR a sa traduction EN avec le même nombre de notes.
@@ -115,10 +125,12 @@
 ### Task 6: Scripts de release et de déploiement
 
 **Files:**
+
 - Create: `scripts/release.sh`, `scripts/deploy.sh`, `scripts/make-cask.sh`, `scripts/make-latest-json.sh`, `scripts/check-release.cjs`, `scripts/deploy.env.example`, `scripts/verify/release.cjs`, `infra/release-worker/index.js`, `infra/release-worker/wrangler.jsonc`, `scripts/verify/worker.cjs`
 - Reference: les mêmes fichiers dans `~/Documents/charon/scripts/`
 
 **Interfaces:**
+
 - Produces: `check-release.cjs [tag]` : sortie 0 si `package.json`, `tauri.conf.json` et `src-tauri/Cargo.toml` portent la même version, que le changelog FR a une entrée pour elle, que le changelog EN a le même nombre de notes, et que le tag (s'il est donné) vaut `v<version>` ; sinon sortie 1 et un message par erreur.
 
 - [ ] **Step 1:** Test `scripts/verify/release.cjs` : exécute `check-release.cjs` sur des fixtures temporaires (versions divergentes, changelog EN manquant, nombre de notes différent, tag faux) et affirme sortie 1 avec le message attendu, puis sortie 0 sur le dépôt courant.
@@ -129,9 +141,11 @@
 ### Task 6 bis: Worker Cloudflare et ressources R2
 
 **Files:**
+
 - Create: `infra/release-worker/index.js`, `infra/release-worker/wrangler.jsonc`, `scripts/verify/worker.cjs`
 
 **Interfaces:**
+
 - Produces: Worker `export default { fetch(request, env): Promise<Response> }` : méthodes `GET` et `HEAD` seulement (sinon 405) ; le chemin `/kairos/<clé>` lit `env.RELEASES.get(<clé>)` ; clé absente ou chemin hors `/kairos/` → 404 ; `latest.json` renvoyé en `application/json` avec `Cache-Control: no-cache`, les autres fichiers avec `ETag` et `Cache-Control: public, max-age=3600` ; jamais de listing du bucket ; les clés avec `..` ou vides → 404.
 
 - [ ] **Step 1:** Test `scripts/verify/worker.cjs` : importe `index.js` avec un faux `env.RELEASES` et affirme : `GET /kairos/latest.json` 200 JSON no-cache ; `GET /kairos/absent` 404 ; `GET /kairos/` 404 ; `GET /kairos/../x` 404 ; `POST` 405 ; `GET /charon/latest.json` 404 ; `HEAD` sans corps.
@@ -142,11 +156,12 @@
 ### Task 7: GitHub (CI, audit, release, Dependabot) et README
 
 **Files:**
+
 - Create: `.github/workflows/ci.yml`, `audit.yml`, `release.yml`, `.github/dependabot.yml`, `.github/ISSUE_TEMPLATE/{bug.yml,idea.yml,config.yml}`, `README.md`
 - Reference: `~/Documents/charon/.github/`
 
 - [ ] **Step 1:** Copier les workflows de Charon. `ci.yml` : jobs `angular` (ubuntu : `npm ci`, `format:check`, `verify`, `build`, `check-release`) et `rust` (macOS : clippy et tests du workspace). `audit.yml` : `cargo audit` sur le workspace. `release.yml` : `preflight` puis job `macos` seul (le job Windows reste en commentaire daté), `workspaces: .` pour `rust-cache`, secrets `TAURI_SIGNING_PRIVATE_KEY` et `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` seulement, artefact `kairos-macos`. `dependabot.yml` : cargo sur `/`, npm sur `/`, actions ; mêmes groupes que Charon, sans l'exception TypeScript propre à Charon si elle n'a plus lieu d'être (la garder tant que Angular exige `<6.1`).
-- [ ] **Step 2:** README : ce qu'est Kairos (lien vers la page Notion), commandes (`npm run dev|build|verify|release|deploy`), et la section « Mise en place de GitHub » : les deux secrets, `npx tauri signer generate -w ~/.tauri/kairos-updater.key` et où coller la clé publique, Workflow permissions *Read and write*, Dependabot alerts et security updates, `npx wrangler login` une fois, bucket R2 `kairos-releases` et Worker (lien vers la page Notion), tap `homebrew-kairos`, `scripts/deploy.env`.
+- [ ] **Step 2:** README : ce qu'est Kairos (lien vers la page Notion), commandes (`npm run dev|build|verify|release|deploy`), et la section « Mise en place de GitHub » : les deux secrets, `npx tauri signer generate -w ~/.tauri/kairos-updater.key` et où coller la clé publique, Workflow permissions _Read and write_, Dependabot alerts et security updates, `npx wrangler login` une fois, bucket R2 `kairos-releases` et Worker (lien vers la page Notion), tap `homebrew-kairos`, `scripts/deploy.env`.
 - [ ] **Step 3:** Valider la syntaxe YAML (`python3 -c "import yaml,sys; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" .github/workflows/*.yml .github/dependabot.yml`) : aucune erreur.
 - [ ] **Step 4:** Commit `ci: workflows GitHub, Dependabot et README`.
 

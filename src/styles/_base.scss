@@ -1,0 +1,49 @@
+// Tokens de design indépendants du thème. Les couleurs sont dans _tokens.scss.
+:root {
+  --font-sans: 'Satoshi', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  --space-2xs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 40px;
+
+  --transition-fast: 140ms ease;
+  --transition-base: 220ms ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+// Champ actif, repris de Charon : contour de 1 px à la couleur d'accent et
+// ombre pleine de 3 px sans flou, de l'accent à 26 %. En erreur, le même motif
+// avec la couleur de danger.
+.focus-ring:focus-visible,
+.focus-ring:focus-within {
+  outline: none;
+  border-color: var(--color-accent-text);
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
+}
+
+.focus-ring.is-invalid:focus-visible,
+.focus-ring.is-invalid:focus-within {
+  border-color: var(--color-status-danger);
+  box-shadow: 0 0 0 3px var(--color-status-danger-ring);
+}

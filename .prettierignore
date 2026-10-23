@@ -1,0 +1,12 @@
+# Sorties de build et dépendances
+dist
+out-tsc
+node_modules
+target
+
+# Fichiers dont la forme est décidée ailleurs
+package-lock.json
+Cargo.lock
+src/assets/changelog.json
+src/styles/_tokens.scss
+design/tokens.json

@@ -44,19 +44,19 @@ Le crate de l'app reste dans `src-tauri/` (et non `crates/kairos-app`) pour que 
 
 ## Ce qu'on copie de Charon, et ce qu'on adapte
 
-| Élément | Source dans Charon | Adaptation |
-| --- | --- | --- |
-| CI (`ci.yml`) | `.github/workflows/ci.yml` | jobs `angular`, `rust` (macOS seul pour l'instant), cohérence de release |
-| Audit | `audit.yml` | chemins du workspace |
-| Release | `release.yml` | job macOS seul ; job Windows gardé en commentaire (plus tard) ; plus de `CLARITY_KEY` |
-| Dependabot | `dependabot.yml` | répertoires `/` (cargo workspace) et `/` (npm), mêmes groupes |
-| Release, deploy, cask, latest.json | `scripts/*.sh` | nom, identifiant, URL, tap `homebrew-kairos` |
-| Cohérence des versions et du changelog | `check-release.cjs` | fichier changelog identique (FR + EN apparié) |
-| Mises à jour dans l'app | `updater.service.ts`, `whats-new.service.ts`, `changelog-i18n.ts` | plugin updater, page « Nouveautés » |
-| Apparence | `theme.service.ts`, `secret-accent.service.ts`, `accent.ts` | accents Kairos, Charon, Jade, Unloved, Unicorn ; Stars, Blåhaj, Rainbow laissés de côté |
-| Squelette Angular | `app.config.ts`, `styles/`, `lang/`, `pipes/` | CSP stricte, i18n FR/EN, zoneless |
-| Qualité | `prettier`, `clippy -D warnings`, profil release (LTO, strip) | inchangé |
-| Modèle de tickets | `.github/ISSUE_TEMPLATE/` | textes Kairos |
+| Élément                                | Source dans Charon                                                | Adaptation                                                                              |
+| -------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| CI (`ci.yml`)                          | `.github/workflows/ci.yml`                                        | jobs `angular`, `rust` (macOS seul pour l'instant), cohérence de release                |
+| Audit                                  | `audit.yml`                                                       | chemins du workspace                                                                    |
+| Release                                | `release.yml`                                                     | job macOS seul ; job Windows gardé en commentaire (plus tard) ; plus de `CLARITY_KEY`   |
+| Dependabot                             | `dependabot.yml`                                                  | répertoires `/` (cargo workspace) et `/` (npm), mêmes groupes                           |
+| Release, deploy, cask, latest.json     | `scripts/*.sh`                                                    | nom, identifiant, URL, tap `homebrew-kairos`                                            |
+| Cohérence des versions et du changelog | `check-release.cjs`                                               | fichier changelog identique (FR + EN apparié)                                           |
+| Mises à jour dans l'app                | `updater.service.ts`, `whats-new.service.ts`, `changelog-i18n.ts` | plugin updater, page « Nouveautés »                                                     |
+| Apparence                              | `theme.service.ts`, `secret-accent.service.ts`, `accent.ts`       | accents Kairos, Charon, Jade, Unloved, Unicorn ; Stars, Blåhaj, Rainbow laissés de côté |
+| Squelette Angular                      | `app.config.ts`, `styles/`, `lang/`, `pipes/`                     | CSP stricte, i18n FR/EN, zoneless                                                       |
+| Qualité                                | `prettier`, `clippy -D warnings`, profil release (LTO, strip)     | inchangé                                                                                |
+| Modèle de tickets                      | `.github/ISSUE_TEMPLATE/`                                         | textes Kairos                                                                           |
 
 Retiré d'office : SFTP/FTP/SSH, terminal, modules, Cadran, Dock, rapport Clarity, thèmes personnalisés avancés.
 
@@ -84,19 +84,19 @@ Les variables Figma (collections Primitives, Accent, Color) sont exportées une 
 
 Dépôt : `https://github.com/LucasRaffalli/kairos`.
 
-**Secrets Actions** (Settings, Secrets and variables, Actions, onglet *Secrets*) :
+**Secrets Actions** (Settings, Secrets and variables, Actions, onglet _Secrets_) :
 
-| Secret | Valeur | Obligatoire |
-| --- | --- | --- |
-| `TAURI_SIGNING_PRIVATE_KEY` | contenu de `~/.tauri/kairos-updater.key` | oui |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | mot de passe de cette clé | oui |
+| Secret                               | Valeur                                   | Obligatoire |
+| ------------------------------------ | ---------------------------------------- | ----------- |
+| `TAURI_SIGNING_PRIVATE_KEY`          | contenu de `~/.tauri/kairos-updater.key` | oui         |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | mot de passe de cette clé                | oui         |
 
 La clé se génère une fois : `npx tauri signer generate -w ~/.tauri/kairos-updater.key` ; sa partie **publique** va dans `plugins.updater.pubkey` de `tauri.conf.json`. Une clé **distincte** de celle de Charon (une clé compromise ne doit pas lier les deux apps). Sauvegarder le mot de passe dans le trousseau.
 
 **Réglages du dépôt :**
 
-- Settings, Actions, General, Workflow permissions : *Read and write* (le workflow déclare déjà `contents: write` pour publier la release).
-- Settings, Code security : activer *Dependabot alerts* et *Dependabot security updates* (non déclarables dans un fichier).
+- Settings, Actions, General, Workflow permissions : _Read and write_ (le workflow déclare déjà `contents: write` pour publier la release).
+- Settings, Code security : activer _Dependabot alerts_ et _Dependabot security updates_ (non déclarables dans un fichier).
 - Branche `main` : pas de règle de protection nécessaire au début.
 
 **Pas de token GitHub** à créer : pas de certificat Apple (signature ad hoc), pas de `CLARITY_KEY`, aucun PAT. Un `GH_TOKEN` (scope `contents:read`) n'est utile que si le dépôt passe en privé, et seulement dans `scripts/deploy.env` en local, jamais comme secret.
