@@ -1888,6 +1888,9 @@ dependencies = [
 [[package]]
 name = "kairos-core"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+]
 
 [[package]]
 name = "keyboard-types"

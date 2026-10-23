@@ -54,3 +54,6 @@ latest.json
 
 # Schémas générés par tauri-build à chaque compilation
 /src-tauri/gen/
+
+# Brouillon local des exécutions de plan
+/.superpowers/

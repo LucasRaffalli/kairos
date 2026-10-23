@@ -5,3 +5,5 @@ description = "Kairos, le cœur : règles métier et base SQLite, partagées par
 edition = "2021"
 authors = ["lucas"]
 publish = false
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
