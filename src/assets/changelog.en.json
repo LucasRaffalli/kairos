@@ -1,0 +1,11 @@
+{
+  "0.1.0": {
+    "title": "The foundation",
+    "notes": [
+      {
+        "text": "Kairos lives in the menu bar: an icon, an empty popover in the app's colors, themes and accents. The timer arrives with the next versions.",
+        "how": "Click the Kairos icon next to the wifi."
+      }
+    ]
+  }
+}

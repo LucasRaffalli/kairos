@@ -1,0 +1,14 @@
+[
+  {
+    "version": "0.1.0",
+    "date": "2026-10-23",
+    "title": "Le socle",
+    "notes": [
+      {
+        "kind": "new",
+        "text": "Kairos s'installe dans la barre de menus : une icône, un popover vide aux couleurs de l'app, des thèmes et des accents. Le chronomètre arrive avec les prochaines versions.",
+        "how": "Cliquez sur l'icône de Kairos à côté du wifi."
+      }
+    ]
+  }
+]
