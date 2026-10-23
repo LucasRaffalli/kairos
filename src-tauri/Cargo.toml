@@ -1,0 +1,21 @@
+[package]
+name = "kairos-app"
+version = "0.1.0"
+description = "Kairos, chronomètre de barre de menus pour Monday : lots par tâche parent et sous-tâche, piloté à la main ou par Claude"
+authors = ["lucas"]
+edition = "2021"
+publish = false
+
+[lib]
+name = "kairos_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+kairos-core = { path = "../crates/kairos-core" }
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+serde_json = "1"

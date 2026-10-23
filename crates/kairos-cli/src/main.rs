@@ -1,7 +1,10 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "kairos", about = "Kairos, chronomètre de barre de menus pour Monday")]
+#[command(
+    name = "kairos",
+    about = "Kairos, chronomètre de barre de menus pour Monday"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,

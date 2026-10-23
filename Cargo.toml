@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/*"]
+members = ["crates/*", "src-tauri"]
 
 # Release : LTO + strip réduisent presque de moitié le binaire.
 # panic reste "unwind" : tao et tokio rattrapent des panics (catch_unwind) ;
