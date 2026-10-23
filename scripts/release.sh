@@ -77,9 +77,9 @@ else
 fi
 
 if git -C "$DIR" push origin HEAD "$TAG"; then
-  echo "Poussé : branche courante + $TAG → la CI démarre (macOS + Windows, ~20 min)."
+  echo "Poussé : branche courante + $TAG → la CI démarre (macOS, 10 à 20 min)."
   echo "Suivre : https://github.com/LucasRaffalli/kairos/actions"
-  echo "Une fois les deux jobs verts : npm run deploy"
+  echo "Une fois le job « macos » vert : npm run deploy"
 else
   echo "⚠ Push impossible (hors-ligne ? remote ?) — à faire à la main : git push origin HEAD $TAG" >&2
 fi
