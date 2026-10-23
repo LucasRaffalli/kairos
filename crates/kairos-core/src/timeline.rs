@@ -53,6 +53,31 @@ fn first_instant_of(day: i64, offset: &dyn Fn(i64) -> i32) -> i64 {
     lo
 }
 
+/// La date sous sa forme canonique `AAAA-MM-JJ` : `2026-10-5` devient `2026-10-05`, le reste est refusé.
+/// Sans cela, un même jour s'écrirait de deux façons et se retrouverait en deux lignes de la base.
+pub fn normalize_date(date: &str) -> Result<String> {
+    let parsed = NaiveDate::parse_from_str(date, "%Y-%m-%d")
+        .map_err(|_| Error::InvalidDate(date.to_string()))?;
+    Ok(parsed.format("%Y-%m-%d").to_string())
+}
+
+/// L'instant d'une heure locale (`secs` secondes après minuit) d'un jour donné, en tenant compte du
+/// décalage **à cet instant** : le 29 mars, 09:00 à Paris n'est pas minuit + 9 h.
+pub fn local_to_instant(date: &str, secs: i64, offset: &dyn Fn(i64) -> i32) -> Result<i64> {
+    let parsed = NaiveDate::parse_from_str(date, "%Y-%m-%d")
+        .map_err(|_| Error::InvalidDate(date.to_string()))?;
+    let local = day_number(parsed) * 86_400 + secs;
+    let mut instant = local - i64::from(offset(local));
+    for _ in 0..3 {
+        let next = local - i64::from(offset(instant));
+        if next == instant {
+            break;
+        }
+        instant = next;
+    }
+    Ok(instant)
+}
+
 /// Les limites d'un jour local : début inclus, minuit suivant exclu.
 pub fn day_bounds(date: &str, offset: &dyn Fn(i64) -> i32) -> Result<Interval> {
     let parsed = NaiveDate::parse_from_str(date, "%Y-%m-%d")
@@ -253,6 +278,58 @@ mod tests {
         );
         assert!(midnights_between(ts(2026, 10, 24, 0, 0), ts(2026, 10, 24, 5, 0), &utc).is_empty());
         assert!(midnights_between(ts(2026, 10, 24, 5, 0), ts(2026, 10, 24, 1, 0), &utc).is_empty());
+    }
+
+    #[test]
+    fn local_times_convert_correctly_on_dst_days() {
+        // Printemps : minuit en CET (+1), 09:00 en CEST (+2).
+        assert_eq!(
+            local_to_instant("2026-03-29", 9 * 3600, &paris).unwrap(),
+            ts(2026, 3, 29, 7, 0)
+        );
+        assert_eq!(
+            local_to_instant("2026-03-29", 30 * 60, &paris).unwrap(),
+            ts(2026, 3, 28, 23, 30)
+        );
+        // Automne : 09:00 en CET (+1).
+        assert_eq!(
+            local_to_instant("2026-10-25", 9 * 3600, &paris).unwrap(),
+            ts(2026, 10, 25, 8, 0)
+        );
+        assert_eq!(
+            local_to_instant("2026-10-25", 0, &paris).unwrap(),
+            ts(2026, 10, 24, 22, 0)
+        );
+        // Un jour ordinaire, décalage constant.
+        assert_eq!(
+            local_to_instant("2026-10-23", 9 * 3600, &utc).unwrap(),
+            ts(2026, 10, 23, 9, 0)
+        );
+        assert_eq!(
+            local_to_instant("hier", 0, &utc).unwrap_err().code(),
+            "invalid_date"
+        );
+    }
+
+    #[test]
+    fn dates_are_normalized_or_refused() {
+        assert_eq!(normalize_date("2026-10-5").unwrap(), "2026-10-05");
+        assert_eq!(normalize_date("2026-1-5").unwrap(), "2026-01-05");
+        assert_eq!(normalize_date("2026-10-23").unwrap(), "2026-10-23");
+        for bad in [
+            "hier",
+            "",
+            "2026-13-45",
+            "2026-02-30",
+            "10/05/2026",
+            "2026-10-05x",
+        ] {
+            assert_eq!(
+                normalize_date(bad).unwrap_err().code(),
+                "invalid_date",
+                "{bad}"
+            );
+        }
     }
 
     #[test]

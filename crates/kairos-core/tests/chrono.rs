@@ -477,3 +477,107 @@ fn the_source_is_kept_on_the_lot() {
         .unwrap();
     assert_eq!(source, "claude-code");
 }
+
+// --- Passe de correction après la relecture finale -----------------------------------------
+
+#[test]
+fn resume_after_the_clock_went_back_is_refused_instead_of_overlapping() {
+    let (k, _d) = kairos();
+    k.start(front("12406850311")).unwrap();
+    k.clock().advance(600);
+    k.pause().unwrap();
+    k.clock().set_now(T9 + 300);
+    assert_eq!(code(k.resume()), "overlap");
+    assert_eq!(entries(&k), vec![(T9, Some(T9 + 600))]);
+}
+
+#[test]
+fn a_start_too_far_in_the_past_is_refused_instead_of_creating_one_entry_per_day() {
+    let (k, _d) = kairos();
+    let err = k
+        .start(StartArgs {
+            at: Some(T9 - 3 * 86_400),
+            ..front("12406850311")
+        })
+        .unwrap_err();
+    assert_eq!(err.code(), "too_old");
+    assert!(err.to_string().contains("kairos add"), "{err}");
+    assert!(entries(&k).is_empty());
+    assert!(
+        k.start(StartArgs {
+            at: Some(T9 - 86_400),
+            ..front("12406850311")
+        })
+        .is_ok(),
+        "hier reste permis"
+    );
+}
+
+/// 2026-10-23 07:00, un lot lancé hier à 20:00 puis oublié : coupé à minuit, ouvert depuis 00:00.
+fn forgotten_lot() -> (Kairos<FakeClock>, tempfile::TempDir) {
+    let (k, d) = kairos();
+    k.clock().set_now(ts(2026, 10, 23, 7, 0));
+    k.start(StartArgs {
+        at: Some(ts(2026, 10, 22, 20, 0)),
+        ..front("12406850311")
+    })
+    .unwrap();
+    assert_eq!(
+        entries(&k),
+        vec![
+            (ts(2026, 10, 22, 20, 0), Some(ts(2026, 10, 23, 0, 0))),
+            (ts(2026, 10, 23, 0, 0), None)
+        ]
+    );
+    (k, d)
+}
+
+#[test]
+fn stopping_at_an_earlier_time_corrects_a_lot_forgotten_overnight() {
+    let (k, _d) = forgotten_lot();
+    let stopped = k.stop(Some(ts(2026, 10, 22, 23, 30))).unwrap();
+    assert_eq!(stopped.duration, 3 * 3600 + 30 * 60);
+    assert_eq!(
+        entries(&k),
+        vec![(ts(2026, 10, 22, 20, 0), Some(ts(2026, 10, 22, 23, 30)))]
+    );
+    assert!(matches!(k.status().unwrap(), Status::Idle));
+}
+
+#[test]
+fn stopping_exactly_at_midnight_keeps_the_previous_piece_whole() {
+    let (k, _d) = forgotten_lot();
+    k.stop(Some(ts(2026, 10, 23, 0, 0))).unwrap();
+    assert_eq!(
+        entries(&k),
+        vec![(ts(2026, 10, 22, 20, 0), Some(ts(2026, 10, 23, 0, 0)))]
+    );
+}
+
+#[test]
+fn stopping_before_the_whole_chain_is_refused_and_changes_nothing() {
+    let (k, _d) = forgotten_lot();
+    assert_eq!(code(k.stop(Some(ts(2026, 10, 22, 20, 0)))), "empty_entry");
+    assert_eq!(code(k.stop(Some(ts(2026, 10, 22, 19, 0)))), "empty_entry");
+    assert_eq!(entries(&k).len(), 2);
+}
+
+#[test]
+fn stopping_inside_a_chain_of_three_days_drops_the_later_pieces() {
+    let (k, _d) = kairos();
+    k.clock().set_now(ts(2026, 10, 23, 7, 0));
+    k.start(StartArgs {
+        at: Some(ts(2026, 10, 21, 22, 0)),
+        ..front("12406850311")
+    })
+    .unwrap();
+    assert_eq!(entries(&k).len(), 3);
+    k.stop(Some(ts(2026, 10, 22, 12, 0))).unwrap();
+    assert_eq!(
+        entries(&k),
+        vec![
+            (ts(2026, 10, 21, 22, 0), Some(ts(2026, 10, 22, 0, 0))),
+            (ts(2026, 10, 22, 0, 0), Some(ts(2026, 10, 22, 12, 0)))
+        ]
+    );
+}

@@ -13,6 +13,10 @@ use crate::model::{
 use crate::report::{self, Report, ReportEntry};
 use crate::timeline::{self, Interval};
 
+/// Un lancement ne peut pas remonter à plus de 2 jours : au-delà, une faute de frappe créerait
+/// une entrée par jour (la découpe à minuit), et `kairos add` fait ce travail proprement.
+const MAX_BACKDATE_SECS: i64 = 2 * 86_400;
+
 /// Longueur maximale d'un nom (tâche, sous-tâche, libellé).
 const MAX_NAME_CHARS: usize = 120;
 
@@ -100,8 +104,11 @@ impl<C: Clock> Kairos<C> {
     pub fn resume(&self) -> Result<StartedLot> {
         self.with_tx(|ctx| {
             let lot_id = paused_lot(ctx)?.ok_or(Error::NothingToResume)?;
+            // Si l'horloge a reculé depuis la pause, reprendre chevaucherait l'entrée fermée.
+            ensure_free_from(ctx, ctx.now)?;
             let entry_id = insert_open_entry(ctx, lot_id, ctx.now)?;
             clear_pause(ctx)?;
+            touch_day(ctx, &timeline::local_date(ctx.now, ctx.offset))?;
             Ok(StartedLot {
                 lot: lot_view(ctx, lot_id)?,
                 entry: entry_by_id(ctx, entry_id)?,
@@ -723,6 +730,15 @@ fn start_in(ctx: &Ctx, args: &StartArgs) -> Result<StartedLot> {
             now: fmt_hm(ctx, ctx.now),
         });
     }
+    if at < ctx.now - MAX_BACKDATE_SECS {
+        return Err(Error::TooOld {
+            at: format!(
+                "{} {}",
+                timeline::local_date(at, ctx.offset),
+                fmt_hm(ctx, at)
+            ),
+        });
+    }
     ensure_free_from(ctx, at)?;
     let lot_id = ensure_lot(ctx, &reference, args.source)?;
     let entry_id = insert_open_entry(ctx, lot_id, at)?;
@@ -753,15 +769,18 @@ fn close_open(ctx: &Ctx, at: Option<i64>) -> Result<StoppedEntry> {
         });
     }
     if end < start || (explicit && end == start) {
-        return Err(if explicit {
-            Error::EmptyEntry
+        // Une heure d'arrêt avant le début de l'entrée ouverte : si elle vient d'une coupure de
+        // minuit, c'est « j'ai oublié d'arrêter hier soir » et l'heure tombe dans une entrée précédente.
+        return if explicit {
+            close_into_earlier_piece(ctx, id, lot_id, start, end)
         } else {
-            Error::ClockBehind {
+            Err(Error::ClockBehind {
                 since: fmt_hm(ctx, start),
-            }
-        });
+            })
+        };
     }
     let lot = lot_view(ctx, lot_id)?;
+    touch_day(ctx, &timeline::local_date(start, ctx.offset))?;
     if end == start {
         ctx.tx.execute("DELETE FROM entries WHERE id = ?1", [id])?;
         return Ok(StoppedEntry {
@@ -788,6 +807,56 @@ fn close_open(ctx: &Ctx, at: Option<i64>) -> Result<StoppedEntry> {
     })
 }
 
+/// Arrête un lot à une heure qui tombe avant le début de l'entrée ouverte, dans une entrée
+/// précédente du même lot (les morceaux d'une coupure de minuit se suivent bout à bout) :
+/// cette entrée est coupée à `at`, les morceaux suivants et l'entrée ouverte sont supprimés.
+fn close_into_earlier_piece(
+    ctx: &Ctx,
+    open_id: i64,
+    lot_id: i64,
+    open_start: i64,
+    at: i64,
+) -> Result<StoppedEntry> {
+    let mut chain: Vec<(i64, i64, i64)> = Vec::new(); // (id, début, fin), du plus récent au plus ancien
+    let mut cursor = open_start;
+    while let Some((id, start)) = ctx
+        .tx
+        .query_row(
+            "SELECT id, start_at FROM entries WHERE lot_id = ?1 AND removed = 0 AND end_at = ?2",
+            params![lot_id, cursor],
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
+        )
+        .optional()?
+    {
+        chain.push((id, start, cursor));
+        cursor = start;
+    }
+    let hit = chain
+        .iter()
+        .position(|&(_, start, end)| start < at && at <= end)
+        .ok_or(Error::EmptyEntry)?;
+    let (piece_id, piece_start, piece_end) = chain[hit];
+    for &(id, start, _) in &chain[..hit] {
+        ctx.tx.execute("DELETE FROM entries WHERE id = ?1", [id])?;
+        touch_day(ctx, &timeline::local_date(start, ctx.offset))?;
+    }
+    ctx.tx
+        .execute("DELETE FROM entries WHERE id = ?1", [open_id])?;
+    touch_day(ctx, &timeline::local_date(open_start, ctx.offset))?;
+    if at < piece_end {
+        ctx.tx.execute(
+            "UPDATE entries SET end_at = ?1 WHERE id = ?2",
+            params![at, piece_id],
+        )?;
+    }
+    touch_day(ctx, &timeline::local_date(piece_start, ctx.offset))?;
+    Ok(StoppedEntry {
+        lot: lot_view(ctx, lot_id)?,
+        entry: entry_by_id(ctx, piece_id)?,
+        duration: at - piece_start,
+    })
+}
+
 /// Le temps chronométré un jour local, entrées ouvertes comprises (comptées jusqu'à maintenant).
 fn day_total(ctx: &Ctx, date: &str) -> Result<i64> {
     let day: Interval = timeline::day_bounds(date, ctx.offset)?;
@@ -808,10 +877,7 @@ fn day_total(ctx: &Ctx, date: &str) -> Result<i64> {
 
 fn date_or_today(ctx: &Ctx, date: Option<&str>) -> Result<String> {
     match date {
-        Some(d) => {
-            timeline::day_bounds(d, ctx.offset)?;
-            Ok(d.to_string())
-        }
+        Some(d) => timeline::normalize_date(d),
         None => Ok(timeline::local_date(ctx.now, ctx.offset)),
     }
 }

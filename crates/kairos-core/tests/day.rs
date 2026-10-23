@@ -625,3 +625,61 @@ fn a_backdated_start_on_a_declared_day_also_sends_it_to_redeclare() {
         "la suite du lot est sur le jour courant"
     );
 }
+
+#[test]
+fn resuming_on_a_declared_day_sends_it_to_redeclare_and_so_does_the_next_stop() {
+    let (k, _d) = kairos();
+    k.start(StartArgs {
+        parent_monday_id: Some("12406850311".into()),
+        at: Some(at(9, 0)),
+        ..StartArgs::default()
+    })
+    .unwrap();
+    k.pause().unwrap(); // 9 h 00 → 17 h 00
+    k.close_day(None, false).unwrap();
+    k.mark_declared(None).unwrap();
+    k.clock().advance(600);
+    k.resume().unwrap();
+    assert_eq!(
+        k.today(None).unwrap().status,
+        DayStatus::ToRedeclare,
+        "du temps vient de s'ajouter à une journée saisie"
+    );
+    k.mark_declared(None).unwrap();
+    k.clock().advance(600);
+    k.stop(None).unwrap();
+    assert_eq!(
+        k.today(None).unwrap().status,
+        DayStatus::ToRedeclare,
+        "l'arrêt change l'entrée d'une journée saisie"
+    );
+}
+
+#[test]
+fn a_date_is_normalized_so_a_day_never_splits_in_two_rows() {
+    let (k, _d) = kairos();
+    k.add_entry(add(
+        "12406850311",
+        ts(2026, 10, 5, 9, 0),
+        ts(2026, 10, 5, 10, 0),
+    ))
+    .unwrap();
+    assert_eq!(k.today(Some("2026-10-5")).unwrap().date, "2026-10-05");
+    k.close_day(Some("2026-10-5"), false).unwrap();
+    k.mark_declared(Some("2026-10-05")).unwrap();
+    k.add_entry(add(
+        "12406856533",
+        ts(2026, 10, 5, 11, 0),
+        ts(2026, 10, 5, 11, 30),
+    ))
+    .unwrap();
+    assert_eq!(
+        k.today(Some("2026-10-5")).unwrap().status,
+        DayStatus::ToRedeclare
+    );
+    assert_eq!(count(&k, "SELECT COUNT(*) FROM days"), 1);
+    assert_eq!(
+        count(&k, "SELECT COUNT(*) FROM days WHERE date = '2026-10-05'"),
+        1
+    );
+}

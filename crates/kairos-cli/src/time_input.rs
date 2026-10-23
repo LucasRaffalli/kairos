@@ -14,7 +14,7 @@ pub fn parse(input: &str, date: &str, offset: &dyn Fn(i64) -> i32) -> Result<i64
     if let Ok(dt) = NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M") {
         let day = dt.format("%Y-%m-%d").to_string();
         let seconds = i64::from(chrono::Timelike::num_seconds_from_midnight(&dt.time()));
-        return Ok(timeline::day_bounds(&day, offset)?.start + seconds);
+        return timeline::local_to_instant(&day, seconds, offset);
     }
     let invalid = || Error::InvalidTime(input.to_string());
     let (h, m) = text.split_once(':').ok_or_else(invalid)?;
@@ -28,7 +28,7 @@ pub fn parse(input: &str, date: &str, offset: &dyn Fn(i64) -> i32) -> Result<i64
     }
     let seconds = h.parse::<i64>().map_err(|_| invalid())? * 3600
         + m.parse::<i64>().map_err(|_| invalid())? * 60;
-    Ok(timeline::day_bounds(date, offset)?.start + seconds)
+    timeline::local_to_instant(date, seconds, offset)
 }
 
 #[cfg(test)]
@@ -89,6 +89,26 @@ mod tests {
             let err = parse(bad, "2026-10-23", &utc).unwrap_err();
             assert_eq!(err.code(), "invalid_time", "{bad}");
         }
+    }
+
+    // Paris : +1 h puis +2 h à 01:00 UTC le 29 mars 2026 ; retour à 01:00 UTC le 25 octobre.
+    fn paris(at: i64) -> i32 {
+        if (1_774_746_000..1_792_890_000).contains(&at) {
+            7200
+        } else {
+            3600
+        }
+    }
+
+    #[test]
+    fn hh_mm_is_exact_on_a_dst_change_day() {
+        // 29 mars 2026, 09:00 à Paris (CEST, +2) = 07:00 UTC ; 25 octobre, 09:00 (CET, +1) = 08:00 UTC.
+        assert_eq!(parse("09:00", "2026-03-29", &paris).unwrap(), 1_774_767_600);
+        assert_eq!(
+            parse("2026-03-29T09:00", "2000-01-01", &paris).unwrap(),
+            1_774_767_600
+        );
+        assert_eq!(parse("09:00", "2026-10-25", &paris).unwrap(), 1_792_915_200);
     }
 
     #[test]

@@ -27,6 +27,10 @@ pub enum Error {
     InvalidName(String),
     InvalidDate(String),
     InvalidTime(String),
+    /// Un lancement qui remonte à plus de 2 jours (`at` : date et heure demandées).
+    TooOld {
+        at: String,
+    },
     /// L'horloge est passée sous le début du lot ouvert.
     ClockBehind {
         since: String,
@@ -60,6 +64,7 @@ impl Error {
             Error::InvalidDate(_) => "invalid_date",
             Error::InvalidTime(_) => "invalid_time",
             Error::ClockBehind { .. } => "clock_behind",
+            Error::TooOld { .. } => "too_old",
             Error::SameLot(_) => "same_lot",
             Error::DayNotOpen(_) => "day_not_open",
             Error::DayNotClosed(_) => "day_not_closed",
@@ -90,6 +95,7 @@ impl fmt::Display for Error {
             Error::InvalidDate(d) => write!(f, "« {d} » n'est pas une date valide : écris-la AAAA-MM-JJ, par exemple 2026-10-23."),
             Error::InvalidTime(t) => write!(f, "« {t} » n'est pas une heure valide : écris 13:30, 2026-10-23T13:30 ou 2026-10-23T13:30:00+02:00."),
             Error::ClockBehind { since } => write!(f, "L'horloge est en retard sur le début du lot ({since}) : corrige l'heure ou utilise --at."),
+            Error::TooOld { at } => write!(f, "Un lancement ne peut pas remonter à plus de 2 jours ({at}) : utilise `kairos add` pour un temps plus ancien."),
             Error::SameLot(lot) => write!(f, "Ce lot tourne déjà : {lot}."),
             Error::DayNotOpen(d) => write!(f, "La journée {d} est déjà clôturée."),
             Error::DayNotClosed(d) => write!(f, "La journée {d} n'est pas clôturée : clôture-la d'abord (kairos close-day)."),
