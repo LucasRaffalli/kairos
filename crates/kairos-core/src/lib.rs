@@ -2,7 +2,9 @@
 //! ligne de commande donnent les mêmes refus et les mêmes messages.
 
 pub mod clock;
+pub mod db;
 pub mod error;
+pub mod model;
 pub mod timeline;
 
 /// Version du cœur, celle du workspace.
