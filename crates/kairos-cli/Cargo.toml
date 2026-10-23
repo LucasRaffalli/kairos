@@ -13,3 +13,9 @@ path = "src/main.rs"
 [dependencies]
 kairos-core = { path = "../kairos-core" }
 clap = { version = "4", features = ["derive"] }
+serde = "1"
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+tempfile = "3"

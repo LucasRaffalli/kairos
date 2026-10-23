@@ -1914,8 +1914,12 @@ dependencies = [
 name = "kairos-cli"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "clap",
  "kairos-core",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
