@@ -1,9 +1,1 @@
-{
-  "default": {
-    "identifier": "default",
-    "description": "Capacités par défaut de Kairos",
-    "local": true,
-    "windows": ["popover"],
-    "permissions": ["core:default", "updater:default", "process:default"]
-  }
-}
+{"default":{"identifier":"default","description":"Capacités par défaut de Kairos","local":true,"windows":["popover"],"permissions":["core:default","updater:default","process:default"]}}

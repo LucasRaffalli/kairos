@@ -1,0 +1,22 @@
+# Avis RustSec acceptés, avec leur raison.
+#
+# Un audit qui reste rouge en permanence ne se lit plus : chaque ligne ici doit
+# porter pourquoi l'avis est accepté et ce qui le lèverait. À rouvrir dès qu'un
+# correctif amont existe.
+
+[advisories]
+ignore = [
+  # zip 4.6.1 : trois avis sur l'EXTRACTION d'archives (liens symboliques hors
+  # du dossier cible, bits SUID/SGID conservés) : RUSTSEC-2026-0367, -0368 et
+  # -0369. La crate arrive uniquement par tauri-plugin-updater (2.14.0, la
+  # dernière version 2.x), qui s'en sert pour extraire les mises à jour au
+  # format .zip, celles de Windows. Kairos ne livre que macOS, dont les mises à
+  # jour sont des .app.tar.gz : zip n'est pas compilé dans le binaire macOS
+  # (`cargo tree -i zip` ne trouve rien pour la cible macOS). De plus l'archive
+  # est téléchargée depuis notre propre serveur et sa signature est vérifiée
+  # avant toute extraction. À lever dès que tauri-plugin-updater passe à zip
+  # >= 9, et AVANT d'ajouter Windows.
+  "RUSTSEC-2026-0367",
+  "RUSTSEC-2026-0368",
+  "RUSTSEC-2026-0369",
+]
