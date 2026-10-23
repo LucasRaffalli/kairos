@@ -10,6 +10,7 @@ use crate::model::{
     AddEntry, Day, DayStatus, DayView, EditEntry, Entry, EntryView, LotView, StartArgs, StartedLot,
     Status, StoppedEntry, SwitchResult, Totals,
 };
+use crate::report::{self, Report, ReportEntry};
 use crate::timeline::{self, Interval};
 
 /// Longueur maximale d'un nom (tâche, sous-tâche, libellé).
@@ -154,6 +155,52 @@ impl<C: Clock> Kairos<C> {
                 });
             }
             Ok(Status::Idle)
+        })
+    }
+
+    /// La ventilation d'une journée : lignes, arrondi, recoupement avec les bornes, texte à saisir.
+    pub fn report(&self, date: Option<&str>) -> Result<Report> {
+        self.with_tx(|ctx| {
+            let date = date_or_today(ctx, date)?;
+            let status = stored_status(ctx, &date)?;
+            let rounding: i64 = ctx
+                .tx
+                .query_row(
+                    "SELECT value FROM settings WHERE key = 'rounding_minutes'",
+                    [],
+                    |r| r.get::<_, String>(0),
+                )?
+                .parse()
+                .unwrap_or(0);
+            let declared: Option<Totals> = match status {
+                DayStatus::ToRedeclare => {
+                    let json: Option<String> = ctx.tx.query_row(
+                        "SELECT declared_totals FROM days WHERE date = ?1",
+                        [&date],
+                        |r| r.get(0),
+                    )?;
+                    json.and_then(|j| serde_json::from_str(&j).ok())
+                }
+                _ => None,
+            };
+            let entries: Vec<ReportEntry> = day_entries(ctx, &date)?
+                .into_iter()
+                .filter(|(e, _)| !e.removed)
+                .map(|(e, lot)| ReportEntry {
+                    start: e.start,
+                    end: e.end.unwrap_or(ctx.now),
+                    parent_monday_id: lot.parent_monday_id,
+                    subtask: lot.subtask,
+                    name: lot.name,
+                })
+                .collect();
+            Ok(report::build(
+                &date,
+                status,
+                &entries,
+                rounding,
+                declared.as_ref(),
+            ))
         })
     }
 
