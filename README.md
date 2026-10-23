@@ -43,7 +43,7 @@ Tout vient de Charon ; seuls les noms changent.
    ```bash
    npx tauri signer generate -w ~/.tauri/kairos-updater.key
    ```
-   Colle la clé **publique** affichée dans `src-tauri/tauri.conf.json`, à `plugins.updater.pubkey` (aujourd'hui un texte provisoire). Garde le mot de passe dans le trousseau.
+   Colle la clé **publique** affichée dans `src-tauri/tauri.conf.json`, à `plugins.updater.pubkey`. Garde le mot de passe dans le trousseau.
 2. **Secrets Actions** (Settings, Secrets and variables, Actions) :
    - `TAURI_SIGNING_PRIVATE_KEY` : le contenu de `~/.tauri/kairos-updater.key`
    - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` : le mot de passe de cette clé
