@@ -48,14 +48,26 @@ const run = (dir, ...args) => spawnSync('node', [path.join(dir, 'scripts/check-r
 }
 // 3. Le changelog doit avoir une entrée pour la version.
 {
-  const r = run(fixture({ fr: [{ version: '0.0.9', date: 'd', title: 't', notes: [{ kind: 'new', text: 'x' }] }], en: { '0.0.9': { notes: [{ text: 'x' }] } } }));
+  const r = run(
+    fixture({ fr: [{ version: '0.0.9', date: 'd', title: 't', notes: [{ kind: 'new', text: 'x' }] }], en: { '0.0.9': { notes: [{ text: 'x' }] } } }),
+  );
   check('sans entrée de changelog : sortie 1', r.status === 1 && /pas d'entrée pour la version 0\.1\.0/.test(r.stderr), r.stderr);
 }
 // 4. La traduction anglaise doit exister, avec le même nombre de notes.
 {
   const noEn = run(fixture({ en: {} }));
   check('sans traduction EN : sortie 1', noEn.status === 1 && /pas de traduction pour la version 0\.1\.0/.test(noEn.stderr), noEn.stderr);
-  const fr2 = [{ version: '0.1.0', date: 'd', title: 't', notes: [{ kind: 'new', text: 'a' }, { kind: 'fixed', text: 'b' }] }];
+  const fr2 = [
+    {
+      version: '0.1.0',
+      date: 'd',
+      title: 't',
+      notes: [
+        { kind: 'new', text: 'a' },
+        { kind: 'fixed', text: 'b' },
+      ],
+    },
+  ];
   const fewer = run(fixture({ fr: fr2, en: { '0.1.0': { title: 't', notes: [{ text: 'a' }] } } }));
   check('moins de notes en EN : sortie 1', fewer.status === 1 && /1 note\(s\) traduite\(s\) pour 2 en français/.test(fewer.stderr), fewer.stderr);
   const blank = run(fixture({ en: { '0.1.0': { title: 'a', notes: [{ text: '  ' }] } } }));

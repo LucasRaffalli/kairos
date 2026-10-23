@@ -17,7 +17,7 @@ const check = (label, ok, extra) => {
 const src = fs.readFileSync(path.join(__dirname, '..', '..', 'infra/release-worker/index.js'), 'utf8');
 const { code } = esbuild.transformSync(src, { format: 'cjs', target: 'es2022' });
 const mod = { exports: {} };
-new Function("module", "exports", code)(mod, mod.exports);
+new Function('module', 'exports', code)(mod, mod.exports);
 const worker = mod.exports.default;
 
 const files = {
@@ -44,7 +44,7 @@ const call = (method, url) => worker.fetch(new Request(`https://release.lucasraf
   const manifest = await call('GET', '/kairos/latest.json');
   check('GET /kairos/latest.json : 200', manifest.status === 200);
   check('latest.json est servi en JSON', manifest.headers.get('Content-Type') === 'application/json');
-  check('latest.json n\'est jamais mis en cache', manifest.headers.get('Cache-Control') === 'no-cache');
+  check("latest.json n'est jamais mis en cache", manifest.headers.get('Cache-Control') === 'no-cache');
   check('et le corps est là', (await manifest.text()) === '{"version":"0.1.0"}');
 
   const archive = await call('GET', '/kairos/Kairos_0.1.0.app.tar.gz');

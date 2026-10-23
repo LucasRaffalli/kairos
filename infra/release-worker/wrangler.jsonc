@@ -7,5 +7,5 @@
   "compatibility_date": "2026-10-01",
   "r2_buckets": [{ "binding": "RELEASES", "bucket_name": "kairos-releases" }],
   // Route limitée à /kairos/* : /charon/* ne passe pas par ici.
-  "routes": [{ "pattern": "release.lucasraffalli.com/kairos/*", "zone_name": "lucasraffalli.com" }]
+  "routes": [{ "pattern": "release.lucasraffalli.com/kairos/*", "zone_name": "lucasraffalli.com" }],
 }

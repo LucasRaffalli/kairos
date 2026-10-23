@@ -1,0 +1,85 @@
+# Build de release, entièrement sur CI : rien ne compile sur la machine de
+# Lucas. La signature macOS est AD-HOC (signingIdentity "-" dans
+# tauri.conf.json) : aucun certificat Apple Developer à importer, seuls deux
+# secrets suffisent.
+#
+# Secrets à créer une fois (Settings → Secrets and variables → Actions) :
+#   TAURI_SIGNING_PRIVATE_KEY          = contenu de ~/.tauri/kairos-updater.key
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD = mot de passe de la clé (trousseau)
+#
+# Déclenché par le push d'un tag v* (npm run release) ou à la main
+# (workflow_dispatch). Récupération : scripts/deploy.sh télécharge l'archive et
+# le .dmg depuis la release GitHub du tag, en une seule tentative — le job doit
+# être vert avant de lancer npm run deploy.
+#
+# Windows : pas de job pour l'instant. Le jour venu, le dupliquer sur
+# windows-latest avec `--bundles nsis` (modèle : release.yml de Charon).
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+# Nécessaire pour publier les fichiers sur la release GitHub du tag.
+permissions:
+  contents: write
+
+jobs:
+  # Une release incohérente (tag, versions, changelog) doit échouer en
+  # quelques secondes, pas après 20 minutes de build.
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Cohérence tag / versions / changelog
+        run: node scripts/check-release.cjs "${{ github.ref_type == 'tag' && github.ref_name || '' }}"
+
+  macos:
+    needs: preflight
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - run: npm ci
+
+      # L'overlay release active createUpdaterArtifacts et les targets app+dmg.
+      - name: Build Tauri (app + dmg, signé ad-hoc)
+        run: npx tauri build --config src-tauri/tauri.release.conf.json
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: kairos-macos
+          path: |
+            target/release/bundle/macos/*.app.tar.gz
+            target/release/bundle/macos/*.app.tar.gz.sig
+            target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+      # Sur un tag v* : attache les artefacts à la release GitHub (créée si
+      # besoin) — deploy.sh les récupère ensuite tout seul.
+      - name: Publier sur la release GitHub
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            target/release/bundle/macos/*.app.tar.gz
+            target/release/bundle/macos/*.app.tar.gz.sig
+            target/release/bundle/dmg/*.dmg

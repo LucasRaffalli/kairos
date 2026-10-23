@@ -1,0 +1,84 @@
+# Garde-fou de chaque push et de chaque PR : les tests tournent avant qu'on
+# pense à tagger une release, pas après (release.yml ne fait que construire).
+#
+# Deux jobs indépendants :
+# - angular : format, scripts de scripts/verify (npm run verify), cohérence de
+#   la release et build Angular ;
+# - rust : clippy et tests du workspace sur macOS, la seule plateforme livrée
+#   pour l'instant (Windows viendra plus tard avec son propre runner).
+
+name: ci
+
+on:
+  push:
+    branches: [main, 'release/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un nouveau push sur la même branche annule le run devenu inutile.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  angular:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Format
+        run: npm run format:check
+
+      - name: Vérifications (scripts/verify)
+        run: npm run verify
+
+      - name: Cohérence des versions et du changelog
+        run: node scripts/check-release.cjs
+
+      - name: Build Angular
+        run: npx ng build
+
+  rust:
+    runs-on: macos-latest
+    env:
+      # Sans informations de débogage : la CI ne débogue rien.
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Un run qui échoue (clippy, un test) a déjà compilé les dépendances :
+          # on garde ce travail, sinon le run suivant repart de zéro.
+          cache-on-failure: true
+
+      # Tauri embarque le dossier du front à la compilation : il doit exister,
+      # même vide, pour que clippy et les tests compilent sans build Angular.
+      - name: Dossier du front (vide)
+        run: mkdir -p dist/kairos/browser && echo '<!doctype html>' > dist/kairos/browser/index.html
+
+      - name: Format Rust
+        run: cargo fmt --all --check
+
+      # -D warnings : un avertissement clippy fait échouer le run, sinon le
+      # linter finit ignoré comme un journal de plus.
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test --workspace

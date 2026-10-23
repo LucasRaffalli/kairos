@@ -1,0 +1,50 @@
+# Veille de sécurité sur les dépendances Rust.
+#
+# Pourquoi une CI dédiée alors que GitHub a déjà Dependabot : les deux ne
+# regardent pas la même base. Dependabot lit la GitHub Advisory Database,
+# RustSec en est la source amont pour Rust et publie AUSSI les avis
+# « unmaintained » et « unsound », qui ne sont pas des failles mais annoncent
+# celles de demain.
+#
+# Les avis acceptés vivent dans .cargo/audit.toml (là où cargo-audit les
+# cherche), avec la raison de chacun : sans cela, l'audit resterait rouge en
+# permanence pour des choses qu'on ne peut pas corriger, et un vrai signal
+# passerait inaperçu.
+
+name: audit
+
+on:
+  # Hebdomadaire : une faille publiée le mardi ne doit pas attendre le prochain
+  # commit pour être vue.
+  schedule:
+    - cron: '0 6 * * 1'
+  push:
+    paths:
+      - 'Cargo.lock'
+      - '**/Cargo.toml'
+      - '.cargo/audit.toml'
+      - '.github/workflows/audit.yml'
+  pull_request:
+    paths:
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  cargo-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Installer cargo-audit
+        run: cargo install cargo-audit --locked
+
+      # Sans `--deny warnings` : les avis « unmaintained » de gtk/gdk sont la
+      # couche Linux de Tauri, jamais compilée dans le binaire macOS. Les
+      # refuser rendrait l'audit rouge en permanence ; les avertissements
+      # restent lisibles dans le journal du run.
+      - name: Auditer les dépendances
+        run: cargo audit

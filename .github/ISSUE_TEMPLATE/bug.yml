@@ -1,0 +1,47 @@
+name: Bug
+description: Quelque chose ne marche pas comme prévu
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci du retour. **Avant d'envoyer, relis ce que tu colles** : un journal ou une capture peuvent contenir des noms de projets, des ID Monday et des chemins de fichiers.
+  - type: textarea
+    id: what
+    attributes:
+      label: Ce qui se passe
+      placeholder: Ce que tu as vu, et ce que tu attendais à la place.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Comment le reproduire
+      placeholder: |
+        1. …
+        2. …
+        3. …
+  - type: dropdown
+    id: area
+    attributes:
+      label: Où ça se passe
+      options:
+        - Popover ou icône de la barre de menus
+        - Lancer, pause, changer de lot
+        - Clôture ou saisie dans Monday
+        - Claude (hooks, MCP, commande kairos)
+        - Mises à jour
+        - Réglages ou apparence
+        - Autre / je ne sais pas
+  - type: input
+    id: version
+    attributes:
+      label: Version de Kairos
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Système
+      placeholder: macOS 15
