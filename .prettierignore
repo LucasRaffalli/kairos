@@ -10,3 +10,4 @@ Cargo.lock
 src/assets/changelog.json
 src/styles/_tokens.scss
 design/tokens.json
+src-tauri/gen
