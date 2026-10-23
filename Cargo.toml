@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+# Release : LTO + strip réduisent presque de moitié le binaire.
+# panic reste "unwind" : tao et tokio rattrapent des panics (catch_unwind) ;
+# en "abort", une panique dans une commande tuerait l'app entière.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"

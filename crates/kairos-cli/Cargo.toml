@@ -1,0 +1,15 @@
+[package]
+name = "kairos-cli"
+version = "0.1.0"
+description = "Kairos en ligne de commande : hooks de Claude Code et serveur MCP"
+edition = "2021"
+authors = ["lucas"]
+publish = false
+
+[[bin]]
+name = "kairos"
+path = "src/main.rs"
+
+[dependencies]
+kairos-core = { path = "../kairos-core" }
+clap = { version = "4", features = ["derive"] }
