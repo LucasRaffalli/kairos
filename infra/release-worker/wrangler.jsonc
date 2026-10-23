@@ -1,0 +1,11 @@
+{
+  // Le Worker des releases de Kairos. Déployé une fois (par Claude via le
+  // connecteur Cloudflare, ou à la main : `cd infra/release-worker && npx wrangler deploy`).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kairos-releases",
+  "main": "index.js",
+  "compatibility_date": "2026-10-01",
+  "r2_buckets": [{ "binding": "RELEASES", "bucket_name": "kairos-releases" }],
+  // Route limitée à /kairos/* : /charon/* ne passe pas par ici.
+  "routes": [{ "pattern": "release.lucasraffalli.com/kairos/*", "zone_name": "lucasraffalli.com" }]
+}
