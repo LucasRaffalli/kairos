@@ -5,6 +5,7 @@ pub mod clock;
 pub mod db;
 pub mod error;
 pub mod model;
+pub mod service;
 pub mod timeline;
 
 /// Version du cœur, celle du workspace.

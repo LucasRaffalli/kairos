@@ -3,9 +3,10 @@
 use serde::Serialize;
 
 /// Qui a lancé le lot.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Source {
+    #[default]
     Manual,
     ClaudeCode,
     ClaudeDesktop,
@@ -72,13 +73,18 @@ pub struct LotView {
 }
 
 impl LotView {
-    /// Le libellé court d'un lot : « Front sur 12406850311 », « Front · Refonte », ou le nom seul.
-    pub fn describe(&self) -> String {
-        let target = match (&self.parent_monday_id, &self.name) {
+    /// Ce sur quoi porte le lot : l'ID Monday du parent, à défaut le nom de la tâche.
+    pub fn target(&self) -> String {
+        match (&self.parent_monday_id, &self.name) {
             (Some(id), _) => id.clone(),
             (None, Some(name)) => name.clone(),
             (None, None) => "?".to_string(),
-        };
+        }
+    }
+
+    /// Le libellé court d'un lot : « Front sur 12406850311 », « Front · Refonte », ou le nom seul.
+    pub fn describe(&self) -> String {
+        let target = self.target();
         match &self.subtask {
             Some(sub) if self.parent_monday_id.is_some() => format!("{sub} sur {target}"),
             Some(sub) => format!("{sub} · {target}"),
@@ -96,6 +102,61 @@ pub struct Entry {
     pub end: Option<i64>,
     pub removed: bool,
     pub note: Option<String>,
+}
+
+/// Ce qu'il faut pour lancer un lot (aussi pour `switch`).
+#[derive(Debug, Clone, Default)]
+pub struct StartArgs {
+    /// ID Monday du parent (chiffres, 1 à 20).
+    pub parent_monday_id: Option<String>,
+    /// Nom affiché du parent, mémorisé avec son ID.
+    pub parent_label: Option<String>,
+    /// Nom de la tâche, quand il n'y a pas d'ID Monday.
+    pub name: Option<String>,
+    /// Sous-tâche ; à défaut, le poste principal quand il y a un ID.
+    pub subtask: Option<String>,
+    /// ID Monday de la sous-tâche, collé à la main.
+    pub subtask_monday_id: Option<String>,
+    /// Heure de début, pour un lancement en retard (vide : maintenant).
+    pub at: Option<i64>,
+    pub source: Source,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StartedLot {
+    pub lot: LotView,
+    pub entry: Entry,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StoppedEntry {
+    pub lot: LotView,
+    pub entry: Entry,
+    /// Secondes passées sur cette entrée.
+    pub duration: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SwitchResult {
+    pub stopped: Option<StoppedEntry>,
+    pub started: StartedLot,
+}
+
+/// Ce que fait Kairos à cet instant.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum Status {
+    Idle,
+    Running {
+        lot: LotView,
+        since: i64,
+        duration: i64,
+        today_total: i64,
+    },
+    Paused {
+        lot: LotView,
+        since: i64,
+    },
 }
 
 #[cfg(test)]

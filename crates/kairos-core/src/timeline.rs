@@ -81,6 +81,23 @@ pub fn split_at_midnights(iv: Interval, offset: &dyn Fn(i64) -> i32) -> Vec<(Str
     parts
 }
 
+/// Tous les minuits locaux `m` tels que `start < m <= end`, du plus ancien au plus récent.
+pub fn midnights_between(start: i64, end: i64, offset: &dyn Fn(i64) -> i32) -> Vec<i64> {
+    let mut out = Vec::new();
+    if end <= start {
+        return out;
+    }
+    let mut day = local_day(start, offset) + 1;
+    loop {
+        let midnight = first_instant_of(day, offset);
+        if midnight > end {
+            return out;
+        }
+        out.push(midnight);
+        day += 1;
+    }
+}
+
 /// Une durée au format du texte Monday : `2 h 10`, minutes sur deux chiffres, arrondies vers le bas.
 pub fn format_duration(secs: i64) -> String {
     let secs = secs.max(0);
@@ -213,6 +230,29 @@ mod tests {
         assert_eq!(clock.now(), ts(2026, 3, 29, 2, 0));
         clock.set_now(5);
         assert_eq!(clock.now(), 5);
+    }
+
+    #[test]
+    fn midnights_between_lists_every_midnight_in_the_range() {
+        let m = midnights_between(ts(2026, 10, 20, 23, 30), ts(2026, 10, 23, 2, 0), &utc);
+        assert_eq!(
+            m,
+            vec![
+                ts(2026, 10, 21, 0, 0),
+                ts(2026, 10, 22, 0, 0),
+                ts(2026, 10, 23, 0, 0)
+            ]
+        );
+    }
+
+    #[test]
+    fn midnights_between_includes_the_end_but_not_the_start() {
+        assert_eq!(
+            midnights_between(ts(2026, 10, 23, 23, 0), ts(2026, 10, 24, 0, 0), &utc),
+            vec![ts(2026, 10, 24, 0, 0)]
+        );
+        assert!(midnights_between(ts(2026, 10, 24, 0, 0), ts(2026, 10, 24, 5, 0), &utc).is_empty());
+        assert!(midnights_between(ts(2026, 10, 24, 5, 0), ts(2026, 10, 24, 1, 0), &utc).is_empty());
     }
 
     #[test]
