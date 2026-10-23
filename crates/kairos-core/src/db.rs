@@ -1,7 +1,7 @@
 //! La base SQLite : ouverture, mode WAL, migrations.
 
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rusqlite::Connection;
 
@@ -37,6 +37,21 @@ impl Db {
     /// Une base dont le `user_version` dépasse celui connu est refusée **avant** toute
     /// écriture : une version plus ancienne ne doit jamais abîmer une base plus récente.
     pub fn open(path: &Path) -> Result<Db> {
+        // SQLite répond « occupé » tout de suite, sans attendre, à certaines collisions à la
+        // création de la base (deux processus qui passent en WAL ensemble) : on réessaie
+        // jusqu'à l'échéance, comme le ferait `busy_timeout` s'il s'appliquait ici.
+        let deadline = Instant::now() + BUSY_TIMEOUT;
+        loop {
+            match Db::open_once(path) {
+                Err(Error::DbUnavailable) if Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(25))
+                }
+                other => return other,
+            }
+        }
+    }
+
+    fn open_once(path: &Path) -> Result<Db> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
@@ -46,20 +61,42 @@ impl Db {
         if version > LATEST_VERSION {
             return Err(Error::DbNewer);
         }
-        conn.query_row("PRAGMA journal_mode = WAL", [], |r| r.get::<_, String>(0))?;
+        let mode: String = conn.query_row("PRAGMA journal_mode", [], |r| r.get(0))?;
+        if !mode.eq_ignore_ascii_case("wal") {
+            conn.query_row("PRAGMA journal_mode = WAL", [], |r| r.get::<_, String>(0))?;
+        }
         conn.pragma_update(None, "foreign_keys", true)?;
         let db = Db { conn };
         db.migrate(version)?;
         Ok(db)
     }
 
+    /// Applique les migrations manquantes. Chacune lit le `user_version` **dans** sa transaction :
+    /// deux processus qui créent la base en même temps ne la migrent pas deux fois (le second
+    /// attend le verrou, puis constate que c'est déjà fait).
     fn migrate(&self, from: i64) -> Result<()> {
         for (index, sql) in MIGRATIONS.iter().enumerate().skip(from as usize) {
-            // Chaque migration et son `user_version` forment une seule transaction.
-            self.conn.execute_batch(&format!(
-                "BEGIN IMMEDIATE;\n{sql}\nPRAGMA user_version = {};\nCOMMIT;",
-                index + 1
-            ))?;
+            let target = index as i64 + 1;
+            self.conn.execute_batch("BEGIN IMMEDIATE")?;
+            let result = (|| -> Result<()> {
+                let current: i64 = self
+                    .conn
+                    .query_row("PRAGMA user_version", [], |r| r.get(0))?;
+                if current >= target {
+                    return Ok(());
+                }
+                self.conn.execute_batch(sql)?;
+                self.conn
+                    .execute_batch(&format!("PRAGMA user_version = {target}"))?;
+                Ok(())
+            })();
+            match result {
+                Ok(()) => self.conn.execute_batch("COMMIT")?,
+                Err(error) => {
+                    let _ = self.conn.execute_batch("ROLLBACK");
+                    return Err(error);
+                }
+            }
         }
         Ok(())
     }

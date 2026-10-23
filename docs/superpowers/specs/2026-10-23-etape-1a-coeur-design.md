@@ -170,3 +170,11 @@ La ligne de commande, l'app (étape 2) et le serveur MCP (1b) peuvent écrire en
 5. `report` : ventilation, arrondi, recoupement, texte, diff.
 6. La ligne de commande, texte et `--json`.
 7. Tests de concurrence et de base ancienne ou plus récente ; mise à jour du README et de Notion.
+
+## Écarts constatés à l'implémentation
+
+- Les colonnes d'instants s'appellent `start_at` et `end_at` (`end` est un mot réservé de SQL) ; les champs Rust gardent `start` et `end`.
+- `Db::open` réessaie jusqu'à 5 secondes quand SQLite répond « occupé » à la création de la base, et chaque migration relit `user_version` dans sa transaction : deux processus qui créent la base en même temps ne la migrent qu'une fois.
+- Un `stop` ou une `pause` à l'instant exact du début supprime l'entrée vide (rien n'a été chronométré) au lieu d'échouer ; avec `--at <= début` : `empty_entry` ; sans `--at` et maintenant < début : `clock_behind`.
+- L'ID Monday d'une sous-tâche est porté par une sous-tâche propre au parent, même pour un nom de base (Front) : l'ID diffère d'un parent à l'autre.
+- Un lot peut porter à la fois un ID Monday et un nom ; `mark_declared` est idempotent ; pour un lot sans ID, une sous-tâche inconnue est créée avec `parent_id` nul.
