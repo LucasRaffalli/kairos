@@ -32,11 +32,14 @@ render(
   'icon-1024.png',
 );
 
-// Barre de menus : glyphe noir sur transparent, 44 px (22 pt en @2x). macOS le
-// teinte selon le thème de la barre (icon_as_template).
+// Barre de menus : glyphe noir sur transparent, 44 px. Tauri ramène l'image à
+// 18 pt de haut : toute marge ici rétrécit d'autant le glyphe (avec 9 px de
+// marge il faisait 11 pt, bien plus petit que les autres icônes). On ne garde
+// que 2 px de respiration. macOS le teinte selon le thème de la barre
+// (icon_as_template).
 render(
   `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">` +
-    `<g transform="translate(9 9) scale(${26 / 154})">${withFill('#000000')}</g></svg>`,
+    `<g transform="translate(2 2) scale(${40 / 154})">${withFill('#000000')}</g></svg>`,
   44,
   'tray-template.png',
 );
