@@ -2,7 +2,7 @@
 # Déploiement d'une release vers Cloudflare R2, en une commande :
 #   récupération des artefacts CI → manifeste latest.json → cask → envoi vers R2.
 #
-# Rien ne compile ici : macOS est buildé par la CI (workflow release.yml,
+# Rien ne compile ici : macOS (et le binaire kairos embarqué dans l'app) est buildé par la CI (workflow release.yml,
 # déclenché par `npm run release`). Ce script tente UNE FOIS de récupérer
 # l'archive et le .dmg depuis la release GitHub du tag courant — s'ils ne sont
 # pas encore là, il le dit clairement plutôt que de boucler ; vérifier l'onglet
@@ -106,12 +106,26 @@ if [ "$ARCHIVE_VERSION" != "$VERSION" ]; then
   echo "Le job « macos » a probablement tourné sur le mauvais commit — à corriger avant de publier." >&2
   exit 1
 fi
+# L'app doit embarquer le binaire `kairos` (npm run build:cli avant le build) : c'est lui que
+# le cask lie au PATH, et lui que le paquet .mcpb emballe.
+if ! tar -tzf "$ARCHIVE" "Kairos.app/Contents/MacOS/kairos" >/dev/null 2>&1; then
+  echo "L'archive macOS de la release $TAG n'embarque pas le binaire kairos (Kairos.app/Contents/MacOS/kairos)." >&2
+  echo "Le job « macos » a-t-il lancé npm run build:cli avant tauri build ?" >&2
+  exit 1
+fi
 DMG_NAME="Kairos_${VERSION}_aarch64.dmg"
 DMG="$ROOT/dist-macos/$DMG_NAME"
 if ! fetch_asset "$DMG_NAME" "$DMG"; then
   echo "(pas de .dmg dans la release $TAG — premières installations via l'archive .app.tar.gz)"
   DMG=""
 fi
+
+# 1b. L'extension Claude Desktop, assemblée avec le binaire de l'archive ci-dessus (le même
+# que celui du cask), puis contrôlée : un binaire d'une autre version que le tag ne part pas.
+MCPB_NAME="Kairos_${VERSION}.mcpb"
+MCPB="$ROOT/dist-macos/$MCPB_NAME"
+"$HERE/make-mcpb.sh" "$ROOT/dist-macos"
+"$HERE/make-mcpb.sh" --check "$MCPB" "$VERSION"
 
 # 2. Le manifeste (signature + URL dedans).
 "$HERE/make-latest-json.sh" "$PUBLIC_URL" > "$ROOT/latest.json"
@@ -151,12 +165,14 @@ put() { # $1 = clé, $2 = fichier, $3 = type MIME
 echo "Envoi vers R2 ($R2_BUCKET) …"
 put "Kairos_${VERSION}.app.tar.gz" "$ARCHIVE" "application/gzip"
 [ -n "$DMG" ] && put "$DMG_NAME" "$DMG" "application/x-apple-diskimage"
+put "$MCPB_NAME" "$MCPB" "application/octet-stream"
 put "latest.json" "$ROOT/latest.json" "application/json"
 
 # Les anciennes versions restent en place (quelques dizaines de Mo, dans le
 # palier gratuit) : le cask et un client qui n'a pas encore vu le nouveau
 # latest.json en ont encore besoin.
 echo "✓ Déployé : $PUBLIC_URL/latest.json"
+echo "✓ Extension Claude Desktop : $PUBLIC_URL/$MCPB_NAME"
 if [ -n "$DMG" ]; then
   echo "✓ Installeur : $PUBLIC_URL/$DMG_NAME"
 else

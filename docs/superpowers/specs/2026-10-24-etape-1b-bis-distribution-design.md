@@ -23,21 +23,26 @@ Hors périmètre : Windows et Intel (comme le DMG actuel), la notarisation Apple
 ## Pièces
 
 ### 1. Compilation du binaire en CI (`release.yml`)
+
 Avant `tauri build`, une étape : `cargo build --release -p kairos-cli --target aarch64-apple-darwin`, copie vers `src-tauri/binaries/kairos-aarch64-apple-darwin`, `codesign -s -`. `src-tauri/tauri.release.conf.json` (et `tauri.conf.json` pour les builds locaux) déclare `bundle.externalBin: ["binaries/kairos"]`. Le dossier `binaries/` est ignoré par git. Un build local d'app sans le binaire échoue clairement : `npm run build:cli` (nouveau) le produit.
 
 ### 2. Le cask (`make-cask.sh`)
+
 Ajoute la ligne `binary` au gabarit. Désinstaller l'app retire le lien. Le `postflight` existant (`xattr -cr`) couvre déjà le binaire, puisqu'il est dans l'app.
 
 ### 3. Le paquet `.mcpb`
+
 Nouveau `scripts/make-mcpb.sh` : assemble `manifest.json` (nom `kairos`, version tirée de `tauri.conf.json`, `server.type: "binary"`, `entry_point: "server/kairos"`, `mcp_config.command: "${__dirname}/server/kairos"`, `args: ["mcp"]`, plateforme `darwin`), l'icône, et le binaire extrait de l'app de la release ; zippe en `Kairos_<version>.mcpb`. Le gabarit du manifeste est un fichier du dépôt (`packaging/mcpb/manifest.json`), pas une chaîne dans le script.
 
 ### 4. Release et déploiement
+
 - `release.yml` : publie aussi le `.mcpb` sur la release GitHub (le build vient après l'app).
 - `deploy.sh` : récupère le `.mcpb`, vérifie que le binaire dedans a la version du tag, l'envoie sur R2 sous un nom versionné, **avant** `latest.json`.
 - `check-release.cjs` : le changelog de la version (français et anglais) doit parler du MCP ; le `.mcpb` n'est pas contrôlé ici (il n'existe pas encore).
 - Le Worker de R2 sert déjà `kairos/*` : aucun changement, vérifier que `.mcpb` a un bon type MIME.
 
 ### 5. Documentation
+
 README : section « Brancher Claude (MCP) » réécrite autour de l'installation Homebrew et du `.mcpb`, avec le chemin de compilation gardé pour le développement. Page Notion « Claude et Kairos » à jour. Changelog 0.2.0 (fr + en).
 
 ## Vérifications avant d'annoncer

@@ -53,21 +53,23 @@ Le spec dit « `tauri.release.conf.json` (et `tauri.conf.json` pour les builds l
 ### Task 1: Le binaire embarqué dans l'app
 
 **Files:**
+
 - Create: `scripts/build-cli.sh`
 - Modify: `src-tauri/tauri.release.conf.json`, `.gitignore`, `package.json`, `.github/workflows/release.yml`
 
 **Interfaces:**
+
 - Produces: `src-tauri/binaries/kairos-aarch64-apple-darwin` (exécutable, signé ad hoc), appelé par `npm run build:cli` ; l'app construite avec l'overlay de release contient `Kairos.app/Contents/MacOS/kairos`.
 
 - [ ] **Step 1: Écrire `scripts/build-cli.sh`** : `cargo build --release -p kairos-cli --target aarch64-apple-darwin`, copie vers `src-tauri/binaries/kairos-aarch64-apple-darwin`, `chmod +x`, `codesign --force -s -` dessus. Échoue avec un message clair hors macOS arm64 (`uname -m`).
 - [ ] **Step 2: Déclarer** `"externalBin": ["binaries/kairos"]` dans `bundle` de `tauri.release.conf.json` ; ajouter `src-tauri/binaries/` au `.gitignore` ; ajouter `"build:cli": "bash scripts/build-cli.sh"` dans `package.json`.
 - [ ] **Step 3: Vérifier en vrai** (le test de cette tâche, c'est le bundle) :
-  Run: `npm run build:cli && codesign -v src-tauri/binaries/kairos-aarch64-apple-darwin && src-tauri/binaries/kairos-aarch64-apple-darwin version`
-  Expected: `kairos 0.1.0`, sans erreur de signature.
+      Run: `npm run build:cli && codesign -v src-tauri/binaries/kairos-aarch64-apple-darwin && src-tauri/binaries/kairos-aarch64-apple-darwin version`
+      Expected: `kairos 0.1.0`, sans erreur de signature.
 - [ ] **Step 4: Construire l'app avec l'overlay, sans la clé de l'updater** :
-  Run: `npx tauri build --bundles app --config src-tauri/tauri.release.conf.json --config '{"bundle":{"createUpdaterArtifacts":false}}'`
-  Then: `target/release/bundle/macos/Kairos.app/Contents/MacOS/kairos version`
-  Expected: `kairos 0.1.0` ; `ls Kairos.app/Contents/MacOS` montre `kairos` et `kairos-app`.
+      Run: `npx tauri build --bundles app --config src-tauri/tauri.release.conf.json --config '{"bundle":{"createUpdaterArtifacts":false}}'`
+      Then: `target/release/bundle/macos/Kairos.app/Contents/MacOS/kairos version`
+      Expected: `kairos 0.1.0` ; `ls Kairos.app/Contents/MacOS` montre `kairos` et `kairos-app`.
 - [ ] **Step 5: CI** — dans `release.yml`, ajouter avant « Build Tauri » une étape `npm run build:cli`. Vérifier que `ci.yml` n'a pas besoin du binaire (Review Focus 3) : `cargo clippy --workspace --all-targets -- -D warnings` passe toujours en local sans `src-tauri/binaries/`.
 - [ ] **Step 6: Commit** — `feat(release): le binaire kairos embarqué dans l'app`
 
@@ -76,10 +78,12 @@ Le spec dit « `tauri.release.conf.json` (et `tauri.conf.json` pour les builds l
 ### Task 2: Le cask lie `kairos` au PATH
 
 **Files:**
+
 - Modify: `scripts/make-cask.sh`, `package.json` (`verify`)
 - Create/Test: `scripts/verify/cask.cjs`
 
 **Interfaces:**
+
 - Consumes: `make-cask.sh` existant (lit `dist-macos/*.dmg`, `TAP_DIR`, `PUBLIC_URL`).
 - Produces: `Casks/kairos.rb` contenant `binary "#{appdir}/Kairos.app/Contents/MacOS/kairos"`.
 
@@ -95,10 +99,12 @@ Le spec dit « `tauri.release.conf.json` (et `tauri.conf.json` pour les builds l
 ### Task 3: Le paquet `.mcpb`
 
 **Files:**
+
 - Create: `packaging/mcpb/manifest.json`, `scripts/make-mcpb.sh`, `scripts/verify/mcpb.cjs`
 - Modify: `package.json` (`verify`)
 
 **Interfaces:**
+
 - Consumes: `dist-macos/*.app.tar.gz` (archive de l'app de la release, contient `Kairos.app/Contents/MacOS/kairos`) ; version lue dans `src-tauri/tauri.conf.json`.
 - Produces: `scripts/make-mcpb.sh [dossier-de-sortie]` écrit `Kairos_<version>.mcpb` (zip) contenant `manifest.json`, `server/kairos` (exécutable), `icon.png` ; sortie 1 avec un message si l'archive ou le binaire manque. `scripts/make-mcpb.sh --check <fichier.mcpb> <version>` sort 1 si le binaire du paquet n'annonce pas `kairos <version>` (pour `deploy.sh`).
 
@@ -115,9 +121,11 @@ Le spec dit « `tauri.release.conf.json` (et `tauri.conf.json` pour les builds l
 ### Task 4: Release et déploiement
 
 **Files:**
+
 - Modify: `.github/workflows/release.yml`, `scripts/deploy.sh`
 
 **Interfaces:**
+
 - Consumes: `make-mcpb.sh` et `make-mcpb.sh --check` (Task 3), le binaire embarqué (Task 1).
 - Produces: sur R2, `Kairos_<version>.mcpb` envoyé avant `latest.json` ; URL annoncée à la fin de `deploy.sh`.
 
@@ -132,6 +140,7 @@ Le spec dit « `tauri.release.conf.json` (et `tauri.conf.json` pour les builds l
 ### Task 5: Documentation et vérification de bout en bout
 
 **Files:**
+
 - Modify: `README.md`
 
 - [ ] **Step 1: README** — réécrire « Brancher Claude (MCP) » : installation par `brew install --cask lucasraffalli/kairos/kairos`, puis `claude mcp add kairos --scope user -- kairos mcp` ; l'extension `.mcpb` pour Claude Desktop (lien `release.lucasraffalli.com/kairos/Kairos_<version>.mcpb`, ce que fait macOS au premier lancement, qu'elle ne se met pas à jour toute seule) ; le chemin de compilation gardé pour le développement ; le cas de deux installations (Homebrew et DMG manuel).
