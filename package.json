@@ -11,8 +11,9 @@
     "dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "tokens": "node scripts/make-tokens.cjs",
     "release": "bash scripts/release.sh",
+    "build:cli": "bash scripts/build-cli.sh",
     "deploy": "bash scripts/deploy.sh",
-    "verify": "node scripts/verify/tokens.cjs && node scripts/verify/theme.cjs && node scripts/verify/lang.cjs && node scripts/verify/whats-new.cjs && node scripts/verify/release.cjs && node scripts/verify/bump.cjs && node scripts/verify/worker.cjs",
+    "verify": "node scripts/verify/tokens.cjs && node scripts/verify/theme.cjs && node scripts/verify/lang.cjs && node scripts/verify/whats-new.cjs && node scripts/verify/release.cjs && node scripts/verify/cask.cjs && node scripts/verify/mcpb.cjs && node scripts/verify/bump.cjs && node scripts/verify/worker.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "bump": "node scripts/bump.cjs"

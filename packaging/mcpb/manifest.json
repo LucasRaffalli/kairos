@@ -1,0 +1,24 @@
+{
+  "manifest_version": "0.3",
+  "name": "kairos",
+  "display_name": "Kairos",
+  "version": "__VERSION__",
+  "description": "Pilote le chronomètre Kairos : lancer, changer et arrêter un lot, corriger la journée, préparer la ligne à saisir dans Monday.",
+  "author": {
+    "name": "Lucas Raffalli",
+    "url": "https://github.com/LucasRaffalli"
+  },
+  "homepage": "https://github.com/LucasRaffalli/kairos",
+  "icon": "icon.png",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/kairos",
+    "mcp_config": {
+      "command": "/bin/sh",
+      "args": ["${__dirname}/server/start.sh"]
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin"]
+  }
+}

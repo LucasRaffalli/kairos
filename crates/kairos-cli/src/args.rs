@@ -145,6 +145,8 @@ pub enum Command {
     },
     /// Lit ou écrit un réglage (main_subtask, rounding_minutes).
     Config { key: String, value: Option<String> },
+    /// Lance le serveur MCP sur l'entrée et la sortie standard (pour Claude Code et Claude Desktop).
+    Mcp,
     /// Affiche la version.
     Version,
 }

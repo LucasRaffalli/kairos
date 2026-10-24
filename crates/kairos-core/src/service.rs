@@ -347,6 +347,20 @@ impl<C: Clock> Kairos<C> {
         })
     }
 
+    /// Une entrée avec son lot, pour décrire ce qu'une suppression retirerait. Lecture seule.
+    pub fn entry_view(&self, id: i64) -> Result<EntryView> {
+        self.with_tx(|ctx| {
+            let entry = entry_by_id(ctx, id)?;
+            Ok(EntryView {
+                id: entry.id,
+                lot: lot_view(ctx, entry.lot_id)?,
+                start: entry.start,
+                end: entry.end,
+                removed: entry.removed,
+            })
+        })
+    }
+
     pub fn config_get(&self, key: &str) -> Result<String> {
         self.with_tx(|ctx| {
             check_setting_key(key)?;
@@ -366,6 +380,12 @@ impl<C: Clock> Kairos<C> {
                 "rounding_minutes" => {
                     return Err(Error::InvalidSetting(format!(
                         "rounding_minutes vaut 0, 5, 10 ou 15 (reçu « {value} »)"
+                    )))
+                }
+                "claude_autonomy" if ["ask", "auto"].contains(&value) => value.to_string(),
+                "claude_autonomy" => {
+                    return Err(Error::InvalidSetting(format!(
+                        "claude_autonomy vaut ask (Claude demande avant les actions difficiles à défaire) ou auto (il agit seul) ; reçu « {value} »"
                     )))
                 }
                 _ => clean_text(&Some(value.to_string()), "Le poste principal")?.ok_or_else(
@@ -1050,9 +1070,9 @@ fn totals(ctx: &Ctx, date: &str) -> Result<Totals> {
 
 fn check_setting_key(key: &str) -> Result<()> {
     match key {
-        "main_subtask" | "rounding_minutes" => Ok(()),
+        "main_subtask" | "rounding_minutes" | "claude_autonomy" => Ok(()),
         other => Err(Error::InvalidSetting(format!(
-            "clé inconnue « {other} » (main_subtask ou rounding_minutes)"
+            "clé inconnue « {other} » (main_subtask, rounding_minutes ou claude_autonomy)"
         ))),
     }
 }

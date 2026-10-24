@@ -12,6 +12,9 @@
 # le .dmg depuis la release GitHub du tag, en une seule tentative — le job doit
 # être vert avant de lancer npm run deploy.
 #
+# Le paquet .mcpb (Claude Desktop) n'est pas construit ici : deploy.sh l'assemble à partir
+# de l'archive de l'app publiée ci-dessus, pour que le binaire soit le même que celui du cask.
+#
 # Windows : pas de job pour l'instant. Le jour venu, le dupliquer sur
 # windows-latest avec `--bundles nsis` (modèle : release.yml de Charon).
 name: release
@@ -56,6 +59,11 @@ jobs:
           cache-on-failure: true
 
       - run: npm ci
+
+      # Le binaire `kairos` (CLI et serveur MCP), signé ad hoc, que l'overlay release
+      # embarque dans l'app (externalBin) : un seul build, réutilisé par le .mcpb.
+      - name: Compiler le binaire kairos
+        run: npm run build:cli
 
       # L'overlay release active createUpdaterArtifacts et les targets app+dmg.
       - name: Build Tauri (app + dmg, signé ad-hoc)

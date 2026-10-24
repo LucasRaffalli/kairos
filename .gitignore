@@ -57,3 +57,6 @@ latest.json
 
 # Brouillon local des exécutions de plan
 /.superpowers/
+
+# Binaire kairos embarqué dans l'app (scripts/build-cli.sh)
+/src-tauri/binaries/

@@ -8,7 +8,10 @@ use rusqlite::Connection;
 use crate::error::{Error, Result};
 
 /// Les migrations, dans l'ordre : l'index + 1 est le `user_version` qu'elles posent.
-const MIGRATIONS: &[&str] = &[include_str!("migrations/001_init.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("migrations/001_init.sql"),
+    include_str!("migrations/002_autonomy.sql"),
+];
 
 /// Le `user_version` de cette version de Kairos.
 pub const LATEST_VERSION: i64 = MIGRATIONS.len() as i64;
