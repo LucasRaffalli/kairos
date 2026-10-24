@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterNextRender, computed, inject, viewChild } from '@angular/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import { fill } from '@app/lang/fill';
@@ -8,9 +8,8 @@ import { KairosStore } from '@app/services/kairos/kairos.store';
 import { PopoverHeader } from '@app/ui';
 
 import { ErrorBanner } from './error-banner';
-import { formatHm } from './logic/clock';
 import { errorField } from './logic/errors';
-import { lotTitle } from './logic/view';
+import { lotTitle, quitSummary } from './logic/view';
 import { QuitDialog } from './quit-dialog';
 import { RunningView } from './running-view';
 import { StartView } from './start-view';
@@ -19,7 +18,7 @@ import { StartView } from './start-view';
  * Le popover de la barre de menus : l'en-tête, le bandeau d'erreur et la vue choisie par l'état du
  * cœur (`pickView`). Seule la coquille ferme la fenêtre, et seulement sur Échap : aucune action ne
  * la ferme (perdre le focus la cache, côté Rust). Elle porte les raccourcis ⌘↵ et ⌘., ajuste la
- * hauteur de la fenêtre au contenu et montre le dialogue « Quitter » quand le cœur le demande.
+ * hauteur de la fenêtre au contenu et montre le dialogue « Quitter » quand le magasin l'ouvre.
  */
 @Component({
   selector: 'app-popover',
@@ -36,8 +35,6 @@ export class Popover {
   protected readonly t = injectT();
 
   private readonly frame = viewChild.required<ElementRef<HTMLElement>>('frame');
-  /** Le dialogue « Quitter » est affiché (lot en cours au moment de ⌘Q ou du menu de l'icône). */
-  protected readonly quitting = signal(false);
 
   /** « lun. 20 oct. » : la date du jour, dans la langue de l'interface. */
   private readonly today = computed(() =>
@@ -61,7 +58,7 @@ export class Popover {
       return null;
     }
     const view = this.store.view();
-    return view === 'running' || view === 'paused' || errorField(error.code) === null ? error : null;
+    return view === 'running' || view === 'paused' || errorField(error.code, this.store.form()) === null ? error : null;
   });
 
   /** Annoncé par les lecteurs d'écran au changement d'état (pas à chaque seconde du chrono). */
@@ -80,13 +77,10 @@ export class Popover {
     return t('popover.live.idle');
   });
 
-  /** « Refonte · 12406850311 · 0 h 42 » : le lot que « Arrêter le lot et quitter » arrêterait. */
+  /** « Front · 12406850311 · 0 h 42 » : le lot que « Arrêter le lot et quitter » arrêterait. */
   protected readonly quitSummary = computed(() => {
     const status = this.store.snapshot()?.status;
-    if (!status || status.state === 'idle') {
-      return '';
-    }
-    return [lotTitle(status.lot), status.lot.parent_monday_id, formatHm(this.store.clockSeconds())].filter(Boolean).join(' · ');
+    return status ? quitSummary(status, this.store.clockSeconds()) : null;
   });
 
   constructor() {
@@ -94,7 +88,6 @@ export class Popover {
     if (new URLSearchParams(window.location.search).get('scenario') === 'switching') {
       this.store.openSwitch();
     }
-    const offQuit = this.api.onQuitRequested(() => this.quitting.set(true));
 
     // La fenêtre prend la hauteur du contenu (Rust la plafonne à l'écran ; au-delà, on défile).
     let observer: ResizeObserver | null = null;
@@ -104,10 +97,7 @@ export class Popover {
       observer.observe(frame);
     });
 
-    inject(DestroyRef).onDestroy(() => {
-      offQuit();
-      observer?.disconnect();
-    });
+    inject(DestroyRef).onDestroy(() => observer?.disconnect());
   }
 
   protected onKey(event: KeyboardEvent): void {
@@ -116,15 +106,15 @@ export class Popover {
     }
     if (event.key === 'Escape') {
       event.preventDefault();
-      if (this.quitting()) {
-        this.quitting.set(false);
+      if (this.store.quitting()) {
+        this.store.cancelQuit();
       } else if ('__TAURI_INTERNALS__' in window) {
         // Côté Rust, une demande de fermeture du popover le cache sans le détruire.
         void getCurrentWindow().close();
       }
       return;
     }
-    if (!event.metaKey || this.quitting() || this.store.stale()) {
+    if (!event.metaKey || this.store.quitting() || this.store.stale()) {
       return;
     }
     const view = this.store.view();
@@ -135,9 +125,5 @@ export class Popover {
       event.preventDefault();
       void this.store.stop();
     }
-  }
-
-  protected quit(stopLot: boolean): void {
-    this.api.quit(stopLot).catch(() => this.quitting.set(false));
   }
 }

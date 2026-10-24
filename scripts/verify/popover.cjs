@@ -156,7 +156,7 @@ check(
   'puces : le poste principal d’abord, puis le socle et les propres, sans doublon',
   same(lib.subtaskChips({ main: 'Front', base: ['Back', 'Front', 'Recettage'], own: ['Recette', 'Back'] }), ['Front', 'Back', 'Recettage', 'Recette']),
 );
-const L1 = { id: 1, parent_monday_id: '111', parent_label: 'Refonte', subtask: 'Front', name: null };
+const L1 = { id: 1, parent_monday_id: '111', parent_label: 'Refonte', subtask: 'Front', subtask_monday_id: '999', name: null };
 const L2 = { id: 2, parent_monday_id: '111', parent_label: 'Refonte', subtask: 'Back', name: null };
 const L3 = { id: 3, parent_monday_id: null, parent_label: null, subtask: 'Front', name: 'Réunion' };
 const L4 = { id: 4, parent_monday_id: '222', parent_label: null, subtask: 'Front', name: null };
@@ -180,8 +180,13 @@ check(
 check('titre d’un lot : libellé, sinon nom, sinon ID', lib.lotTitle(L1) === 'Refonte' && lib.lotTitle(L3) === 'Réunion' && lib.lotTitle(L4) === '222');
 const r1 = lib.lotRequest(L1);
 check(
-  'relancer un lot avec ID',
-  r1.parent_monday_id === '111' && r1.parent_label === 'Refonte' && r1.name === null && r1.subtask === 'Front' && r1.at === null,
+  'relancer un lot avec ID (et l’ID de sa sous-tâche)',
+  r1.parent_monday_id === '111' &&
+    r1.parent_label === 'Refonte' &&
+    r1.name === null &&
+    r1.subtask === 'Front' &&
+    r1.subtask_monday_id === '999' &&
+    r1.at === null,
 );
 const r3 = lib.lotRequest(L3);
 check('relancer un lot sans ID : par son nom', r3.parent_monday_id === null && r3.name === 'Réunion' && r3.subtask === 'Front');
@@ -202,12 +207,39 @@ check('relancer un lot sans ID : par son nom', r3.parent_monday_id === null && r
   check('jour : total vivant', total === 1050);
 }
 
-// --- 6. Champ d'une erreur ----------------------------------------------------
-check('invalid_monday_id : parent', lib.errorField('invalid_monday_id') === 'parent');
-check('invalid_name : parent', lib.errorField('invalid_name') === 'parent');
-check('invalid_name d’une sous-tâche perso', lib.errorField('invalid_name', true) === 'subtask');
-check('in_future, too_old : début', lib.errorField('in_future') === 'time' && lib.errorField('too_old') === 'time');
-check('db_unavailable : bandeau', lib.errorField('db_unavailable') === null);
+// --- 6. Champ d'une erreur : décidé d'après le brouillon -----------------------
+{
+  const f = (over) => ({ ...lib.emptyForm(), ...over });
+  const at = (code, over) => lib.errorField(code, f(over));
+  // invalid_monday_id : le cœur valide les deux ID avec le même code.
+  check('ID du parent seul fautif : sous l’ID du parent', at('invalid_monday_id', { parentId: '12a', subtaskId: '42' }) === 'parent-id');
+  check('ID de la sous-tâche seul fautif : sous son ID', at('invalid_monday_id', { parentId: '124', subtaskId: '4x2' }) === 'subtask-id');
+  check('ID trop long (21 chiffres) : fautif', at('invalid_monday_id', { parentId: '1'.repeat(21) }) === 'parent-id');
+  check('les deux ID fautifs : bandeau', at('invalid_monday_id', { parentId: 'a', subtaskId: 'b' }) === null);
+  check('aucun ID fautif visible : bandeau', at('invalid_monday_id', { parentId: '12', subtaskId: '' }) === null);
+  // invalid_name : une ligne, 120 caractères au plus, comme le cœur.
+  check(
+    'parent de 500 caractères + sous-tâche courte : sous le nom du parent',
+    at('invalid_name', { parentName: 'x'.repeat(500), subtask: 'Back' }) === 'parent-name',
+  );
+  check('sous-tâche sur deux lignes : sous son nom', at('invalid_name', { parentName: 'Refonte', subtask: 'a\nb' }) === 'subtask-name');
+  check('121 caractères (accents comptés comme un) : fautif', at('invalid_name', { subtask: 'é'.repeat(121) }) === 'subtask-name');
+  check('120 caractères : pas fautif', at('invalid_name', { parentName: 'é'.repeat(120) }) === null);
+  check('les deux noms fautifs : bandeau', at('invalid_name', { parentName: 'x'.repeat(200), subtask: 'y'.repeat(200) }) === null);
+  check('aucun nom fautif visible : bandeau', at('invalid_name', { parentName: 'Refonte', subtask: 'Back' }) === null);
+  check('same_lot avec ID : sous l’ID', at('same_lot', { parentId: '12' }) === 'parent-id');
+  check('same_lot sans ID : sous le nom', at('same_lot', { parentName: 'Réunion' }) === 'parent-name');
+  check('in_future, too_old : début', at('in_future', {}) === 'time' && at('too_old', {}) === 'time');
+  check('db_unavailable : bandeau', at('db_unavailable', {}) === null);
+}
+
+// --- 6 ter. Résumé du dialogue Quitter (maquette 230:456 : sous-tâche · ID · durée) --
+{
+  const running = { state: 'running', lot: L1, since: 0, duration: 0, today_total: 0, launched_by: null, workdir: null };
+  check('quitSummary : sous-tâche · ID · durée', lib.quitSummary(running, 2533) === 'Front · 111 · 0 h 42', lib.quitSummary(running, 2533));
+  check('quitSummary : lot sans ID ni sous-tâche → son nom', lib.quitSummary({ ...running, lot: { ...L3, subtask: null } }, 60) === 'Réunion · 0 h 01');
+  check('quitSummary : rien en cours → null', lib.quitSummary({ state: 'idle' }, 0) === null);
+}
 
 // --- 6 bis. Les vues, par lecture du source -------------------------------------
 {
@@ -234,7 +266,10 @@ check('db_unavailable : bandeau', lib.errorField('db_unavailable') === null);
   check('la coquille ne ferme qu’une fois, sur Échap', closes.length === 1 && /'Escape'/.test(shell), closes.join());
   check('la coquille : ⌘↵ et ⌘.', /metaKey/.test(shell) && /'Enter'/.test(shell) && /'\.'/.test(shell));
   check('la coquille : la hauteur suit le contenu', /ResizeObserver/.test(shell) && /setPopoverHeight/.test(shell));
-  check('la coquille : dialogue Quitter sur onQuitRequested', /onQuitRequested/.test(shell));
+  check(
+    'le magasin : dialogue Quitter sur onQuitRequested',
+    /onQuitRequested/.test(read(path.join(REPO, 'src', 'app', 'services', 'kairos', 'kairos.store.ts'))),
+  );
   check('la coquille : ?scenario=switching ouvre « Changer de lot »', /'switching'/.test(shell) && /openSwitch\(\)/.test(shell));
   const shellHtml = read(path.join(P, 'popover.html'));
   check('la coquille : aria-live="polite"', /aria-live="polite"/.test(shellHtml));
@@ -243,6 +278,17 @@ check('db_unavailable : bandeau', lib.errorField('db_unavailable') === null);
     'closeSwitch a un appelant',
     appFiles.some((f) => !f.endsWith('kairos.store.ts') && /closeSwitch\(\)/.test(read(f))),
   );
+
+  const startHtml = read(path.join(P, 'start-view.html'));
+  check('Lancer : les blocs 1, 2, 3 en variante « étape »', (startHtml.match(/variant="step"/g) ?? []).length === 3);
+  check('Lancer : l’ID de la sous-tâche reçoit son erreur', /fieldError\('subtask-id'\)/.test(startHtml));
+  const running = read(path.join(P, 'running-view.ts')) + read(path.join(P, 'running-view.html'));
+  check('Minuteur : « sous-tâche <ID> »', /running\.subtaskId/.test(running) && /subtask_monday_id/.test(running));
+  check('la coquille lit le dialogue Quitter dans le magasin', /store\.quitting\(\)/.test(shellHtml) && !/onQuitRequested/.test(shell));
+  check('Quitter : le résumé vient de quitSummary', /quitSummary/.test(shell));
+
+  // Une classe de vue qui porte le nom d'une variante de composant (« .step ») s'applique aussi à son hôte.
+  check('start-view.scss ne définit pas .step (classe de k-section-title)', !/^\.step\b/m.test(read(path.join(P, 'start-view.scss'))));
 
   // Les clés de traduction utilisées par les vues existent en fr ET en en.
   const keysOf = (file) => new Set([...read(path.join(REPO, 'src', 'app', 'lang', file)).matchAll(/^\s*'([\w.-]+)':/gm)].map((m) => m[1]));
@@ -553,6 +599,99 @@ function spied(scenarioName, now = () => NOW0) {
     store.form.update((f) => ({ ...f, parentId: '5' }));
     await store.start();
     check('already_running silencieux : brouillon gardé', store.form().parentId === '5' && store.error() === null);
+    store.dispose();
+  }
+
+  // Les scénarios portent l'ID de la sous-tâche (ligne « parent … · sous-tâche … »).
+  {
+    const { api } = spied('running');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    check('scénario running : ID de sous-tâche', !!store.snapshot().status.lot.subtask_monday_id);
+    store.dispose();
+    const c = spied('claude-launched');
+    const s2 = new lib.KairosStore(c.api, () => NOW0);
+    await s2.reload();
+    check('scénario claude-launched : ID de sous-tâche', !!s2.snapshot().status.lot.subtask_monday_id);
+    s2.dispose();
+  }
+
+  // Le lot s'arrête ailleurs pendant « Changer de lot » : le panneau se referme pour de bon.
+  {
+    const { api, inner } = spied('running');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    store.openSwitch();
+    await inner.stop();
+    await tick();
+    check('arrêt extérieur : plus de « Changer de lot »', store.view() === 'start');
+    await inner.start({ parent_monday_id: '6' });
+    await tick();
+    check('lot lancé ensuite : minuteur, pas le panneau', store.view() === 'running');
+    store.dispose();
+  }
+
+  // Puces périmées : remises à zéro au retour à « rien en cours » et après un lancement du formulaire.
+  {
+    const { api, inner } = spied('running');
+    api.override = { subtaskChoices: async () => ({ main: 'Front', base: ['Back'], own: ['Propre'] }) };
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    await store.loadChoices('12');
+    check('puces du parent demandé', store.choices().own[0] === 'Propre');
+    await inner.stop();
+    await tick();
+    check('retour à « rien en cours » : puces propres oubliées', store.choices().own.length === 0, JSON.stringify(store.choices()));
+    await store.loadChoices('12');
+    store.form.update((f) => ({ ...f, parentId: '12' }));
+    await store.start();
+    check('après un lancement : puces propres oubliées', store.choices().own.length === 0);
+    await store.loadChoices('12');
+    store.resetChoices();
+    check('resetChoices : puces propres oubliées', store.choices().own.length === 0);
+    store.dispose();
+  }
+
+  // Dialogue Quitter : ouvert à la demande, fermé si le lot s'arrête ailleurs, erreur visible si quit() échoue.
+  {
+    const { api, inner, calls } = spied('running');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    inner.requestQuit();
+    check('demande de quitter : dialogue ouvert', store.quitting() === true);
+    store.cancelQuit();
+    check('Annuler : dialogue fermé', store.quitting() === false);
+    inner.requestQuit();
+    await inner.stop();
+    await tick();
+    check('lot arrêté ailleurs : dialogue fermé', store.quitting() === false);
+    store.dispose();
+
+    const b = spied('running');
+    const s2 = new lib.KairosStore(b.api, () => NOW0);
+    await s2.reload();
+    b.inner.requestQuit();
+    b.api.override = {
+      quit: async () => {
+        throw { code: 'internal', message: 'Impossible de quitter.' };
+      },
+    };
+    await s2.quit(true);
+    check('quit() en échec : erreur au bandeau, dialogue fermé', s2.error()?.message === 'Impossible de quitter.' && s2.quitting() === false);
+    b.api.override = undefined;
+    b.inner.requestQuit();
+    await s2.quit(false);
+    check('quit(false) appelle le pont', b.calls.filter((c) => c === 'quit').length === 2);
+    s2.dispose();
+    void calls;
+  }
+  {
+    // ?scenario=quit : le faux pont demande de quitter tout seul, pour voir le dialogue dans le navigateur.
+    const { api } = spied('quit');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    check('scénario quit : dialogue ouvert', store.quitting() === true && store.view() === 'running');
     store.dispose();
   }
 

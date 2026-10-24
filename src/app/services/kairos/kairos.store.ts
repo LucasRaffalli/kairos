@@ -19,6 +19,7 @@ export class KairosStore {
   private readonly _error = signal<BridgeError | null>(null);
   private readonly _stale = signal(false);
   private readonly _switching = signal(false);
+  private readonly _quitting = signal(false);
   /** Les puces demandées pour le parent saisi ; `null` : celles du dernier relevé. */
   private readonly _choices = signal<SubtaskChoices | null>(null);
   /** Numéro de la dernière demande de puces : une réponse plus ancienne arrivée après est ignorée. */
@@ -29,6 +30,7 @@ export class KairosStore {
   private offsetMs = 0;
   private readonly timer: ReturnType<typeof setInterval>;
   private readonly unsubscribe: () => void;
+  private readonly unsubscribeQuit: () => void;
 
   /** Le dernier relevé connu (gardé tel quel quand la base est inaccessible). */
   readonly snapshot = this._snapshot.asReadonly();
@@ -38,11 +40,24 @@ export class KairosStore {
   readonly error = this._error.asReadonly();
   /** La base est inaccessible ou trop récente : la dernière vue reste affichée, grisée. */
   readonly stale = this._stale.asReadonly();
+  /** Le dialogue « Quitter » est ouvert (demande de quitter alors qu'un lot tourne). */
+  readonly quitting = this._quitting.asReadonly();
   /** Le brouillon du formulaire « Lancer » / « Changer de lot ». */
   readonly form = signal<FormDraft>(emptyForm());
 
-  /** Les puces de sous-tâche du formulaire. */
-  readonly choices = computed<SubtaskChoices>(() => this._choices() ?? this._snapshot()?.choices ?? { main: '', base: [], own: [] });
+  /**
+   * Les puces de sous-tâche du formulaire : celles demandées pour le parent saisi ; à défaut, le
+   * poste principal et le socle du relevé, SANS ses sous-tâches propres (elles sont celles du lot
+   * en cours, pas forcément du parent saisi).
+   */
+  readonly choices = computed<SubtaskChoices>(() => {
+    const requested = this._choices();
+    if (requested) {
+      return requested;
+    }
+    const known = this._snapshot()?.choices;
+    return known ? { ...known, own: [] } : { main: '', base: [], own: [] };
+  });
 
   readonly view = computed<ViewName>(() => {
     const snapshot = this._snapshot();
@@ -69,6 +84,7 @@ export class KairosStore {
     this.timer = setInterval(() => this.tick(), 1000);
     // Une écriture venue d'ailleurs (ligne de commande, Claude) : on relit tout.
     this.unsubscribe = api.onChanged(() => void this.reload());
+    this.unsubscribeQuit = api.onQuitRequested(() => this._quitting.set(true));
   }
 
   /** Bat une seconde : relit l'horloge locale. Appelé par le minuteur interne (et par les tests). */
@@ -80,6 +96,7 @@ export class KairosStore {
   dispose(): void {
     clearInterval(this.timer);
     this.unsubscribe();
+    this.unsubscribeQuit();
   }
 
   /** Relit l'état du cœur. En cas d'échec, la dernière vue reste (grisée si la base est en cause). */
@@ -90,12 +107,25 @@ export class KairosStore {
       this.offsetMs = snapshot.server_time * 1000 - this.nowMs();
       this._snapshot.set(snapshot);
       this._stale.set(false);
+      if (snapshot.status.state === 'idle') {
+        // Plus rien ne tourne (arrêté ici ou ailleurs) : « Changer de lot » et « Quitter » n'ont
+        // plus d'objet, et les puces propres d'un ancien parent ne doivent pas réapparaître.
+        this._switching.set(false);
+        this._quitting.set(false);
+        this.resetChoices();
+      }
       if (this._error() && isStaleCode(this._error()!.code)) {
         this._error.set(null);
       }
     } catch (error) {
       this.fail(toBridgeError(error));
     }
+  }
+
+  /** Oublie les puces demandées (parent changé, ou plus rien en cours) ; une réponse en route est ignorée. */
+  resetChoices(): void {
+    this.choicesRequest++;
+    this._choices.set(null);
   }
 
   /** Redemande les puces quand le parent saisi change (`null` : aucun parent, le poste principal). */
@@ -141,6 +171,23 @@ export class KairosStore {
     return this.write(() => (idle ? this.api.start(request) : this.api.switch(request)));
   }
 
+  cancelQuit(): void {
+    this._quitting.set(false);
+  }
+
+  /**
+   * Quitte l'app, en arrêtant d'abord le lot si `stopLot`. Un échec ferme le dialogue et montre
+   * l'erreur dans le bandeau, plutôt que de laisser l'app ouverte sans rien dire.
+   */
+  async quit(stopLot: boolean): Promise<void> {
+    try {
+      await this.api.quit(stopLot);
+    } catch (error) {
+      this._quitting.set(false);
+      this.fail(toBridgeError(error));
+    }
+  }
+
   stop(): Promise<void> {
     return this.write(() => this.api.stop());
   }
@@ -171,6 +218,7 @@ export class KairosStore {
       this._switching.set(false);
       if (fromForm) {
         this.form.set(emptyForm());
+        this.resetChoices();
       }
     } catch (error) {
       await this.refused(toBridgeError(error));

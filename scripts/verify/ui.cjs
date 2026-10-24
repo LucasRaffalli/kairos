@@ -115,6 +115,31 @@ const src = (name, ext) => (read(path.join(UI, `${name}.${ext}`)) ?? '').replace
   check('chip : sélectionnée repasse le contour en plein', /border-style:\s*solid/.test(block));
 }
 
+// Titre d'étape (« ① Tâche parent », maquette 282:1560) : pastille ronde teintée de l'accent, contour
+// d'accent, chiffre en texte principal (≥ 4,5:1 dans les trois thèmes), titre en gras et casse normale.
+{
+  const ts = read(path.join(UI, 'section-title.ts')) ?? '';
+  const css = src('section-title', 'scss');
+  check("section-title : entrée variant 'label' | 'step', 'label' par défaut", /variant\s*=\s*input<'label'\s*\|\s*'step'>\('label'\)/.test(ts));
+  const start = css.indexOf(':host(.step)');
+  const block = start >= 0 ? css.slice(start) : '';
+  const badge = block.match(/\.step\s*\{([^}]*)\}/);
+  const tint = badge && badge[1].match(/background:\s*color-mix\(in srgb,\s*var\(--color-accent-text\)\s*(\d+)%,\s*var\(--color-bg-popover\)\)/);
+  check('section-title (étape) : pastille ronde', badge !== null && /border-radius:\s*var\(--radius-full\)/.test(badge[1]));
+  check('section-title (étape) : pastille teintée de l’accent sur le popover', tint !== null);
+  check('section-title (étape) : contour d’accent', badge !== null && /border:\s*1px solid var\(--color-accent-text\)/.test(badge[1]));
+  check('section-title (étape) : chiffre en --color-text-primary', badge !== null && /(?<![\w-])color:\s*var\(--color-text-primary\)/.test(badge[1]));
+  if (tint) {
+    const w = worst((p) => ratio(rgb(p['text-primary']), mix(rgb(p['accent-text']), rgb(p['bg-popover']), +tint[1])));
+    check(`section-title (étape) : chiffre ≥ ${AA}:1 (pire cas ${w.toFixed(2)})`, w >= AA);
+  }
+  const title = block.match(/\.title\s*\{([^}]*)\}/);
+  check(
+    'section-title (étape) : titre en gras, casse normale, texte principal',
+    title !== null && /font-weight:\s*700/.test(title[1]) && /text-transform:\s*none/.test(title[1]) && /color:\s*var\(--color-text-primary\)/.test(title[1]),
+  );
+}
+
 // Texte d'erreur : un token par thème, ≥ 4,5:1 sur la surface du champ et sur le fond de l'alerte.
 {
   const defined = {};

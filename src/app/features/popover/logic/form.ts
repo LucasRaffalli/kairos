@@ -60,7 +60,7 @@ export function lotRequest(lot: LotView): StartRequest {
     parent_label: parentId ? lot.parent_label : null,
     name: parentId ? null : lot.name,
     subtask: lot.subtask,
-    subtask_monday_id: null,
+    subtask_monday_id: lot.subtask_monday_id,
     at: null,
   };
 }

@@ -3,13 +3,13 @@
     <p class="clock" [class.frozen]="s.state === 'paused'" aria-hidden="true">{{ clock() }}</p>
     <p class="sr-only">{{ clockSpoken() }}</p>
     <h2 class="name" [title]="title()">{{ title() }}</h2>
-    @if (s.lot.subtask || s.lot.parent_monday_id) {
+    @if (s.lot.subtask || ids()) {
       <div class="ticket">
         @if (s.lot.subtask; as subtask) {
           <k-badge [text]="subtask" [title]="subtask" />
         }
-        @if (s.lot.parent_monday_id; as id) {
-          <span class="ids">{{ fill(t()('running.parent'), { id }) }}</span>
+        @if (ids(); as text) {
+          <span class="ids" [title]="text">{{ text }}</span>
         }
       </div>
     }

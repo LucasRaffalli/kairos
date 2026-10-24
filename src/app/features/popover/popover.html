@@ -1,6 +1,6 @@
 <div class="frame" #frame>
-  @if (quitting()) {
-    <app-quit-dialog [summary]="quitSummary()" (stopAndQuit)="quit(true)" (keepAndQuit)="quit(false)" (cancelled)="quitting.set(false)" />
+  @if (store.quitting() && quitSummary(); as summary) {
+    <app-quit-dialog [summary]="summary" (stopAndQuit)="store.quit(true)" (keepAndQuit)="store.quit(false)" (cancelled)="store.cancelQuit()" />
   } @else {
     <k-popover-header [title]="t()('popover.title')" [subtitle]="subtitle()" />
     @if (bannerError(); as error) {

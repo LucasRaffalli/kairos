@@ -6,12 +6,9 @@ import { KairosStore } from '@app/services/kairos/kairos.store';
 import { Button, Chip, Field, Icon, QuickResume, RecentPill, SectionTitle } from '@app/ui';
 
 import { formatClock } from './logic/clock';
-import { errorField } from './logic/errors';
+import { errorField, type ErrorField } from './logic/errors';
 import { canSubmit, subtaskChips, type FormDraft } from './logic/form';
 import { lotTitle, quickResumes, recentParents } from './logic/view';
-
-/** Les champs sous lesquels un refus du cœur peut s'afficher. */
-type FieldName = 'parent-name' | 'parent-id' | 'subtask' | 'time';
 
 /** Attente après la dernière frappe dans « ID Monday » avant de redemander les puces du parent. */
 const CHOICES_DELAY_MS = 300;
@@ -75,13 +72,15 @@ export class StartView {
   });
 
   constructor() {
-    // Changer d'ID de parent redemande ses puces (les sous-tâches propres à ce parent).
+    // Changer d'ID de parent oublie aussitôt les puces de l'ancien, puis redemande celles du
+    // nouveau (les sous-tâches propres à ce parent) après une courte pause de frappe.
     let timer: ReturnType<typeof setTimeout> | undefined;
     let asked: string | null | undefined;
     effect(() => {
       const parent = this.form().parentId.trim() || null;
       clearTimeout(timer);
       if (parent !== asked) {
+        this.store.resetChoices();
         timer = setTimeout(() => {
           asked = parent;
           void this.store.loadChoices(parent);
@@ -122,19 +121,10 @@ export class StartView {
     void this.store.launchRecent(lot);
   }
 
-  /** Le refus du cœur à afficher sous ce champ, s'il le vise. */
-  protected fieldError(field: FieldName): string | null {
+  /** Le refus du cœur à afficher sous ce champ, s'il le vise (sinon il est dans le bandeau). */
+  protected fieldError(field: ErrorField): string | null {
     const error = this.store.error();
-    const target = error && errorField(error.code, this.selectedChip() === null);
-    if (!error || !target) {
-      return null;
-    }
-    if (target === 'parent') {
-      // Un nom refusé, ou un parent saisi sans ID : sous « Nom » ; le reste vise l'ID.
-      const underName = error.code === 'invalid_name' || !this.form().parentId.trim();
-      return field === (underName ? 'parent-name' : 'parent-id') ? error.message : null;
-    }
-    return target === field ? error.message : null;
+    return error && errorField(error.code, this.form()) === field ? error.message : null;
   }
 
   /** Sous « Début » : le refus du cœur, sinon un début mal écrit (seule règle jugée ici). */

@@ -46,6 +46,7 @@ export const fr = {
 
   'running.clock': 'Durée : {duration}',
   'running.parent': 'parent {id}',
+  'running.subtaskId': 'sous-tâche {id}',
   'running.pausedSince': 'En pause depuis {time}',
   'running.stop': 'Arrêter',
   'running.pause': 'Pause',

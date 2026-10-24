@@ -11,6 +11,8 @@ export interface LotView {
   parent_monday_id: string | null;
   parent_label: string | null;
   subtask: string | null;
+  /** L'ID Monday de la sous-tâche, quand il est connu. */
+  subtask_monday_id: string | null;
   name: string | null;
 }
 

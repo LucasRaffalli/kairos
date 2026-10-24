@@ -11,8 +11,8 @@
 }
 
 <div class="steps">
-  <section class="step">
-    <k-section-title [step]="1" [title]="t()('start.parent.title')" />
+  <section class="block">
+    <k-section-title variant="step" [step]="1" [title]="t()('start.parent.title')" />
     <p class="help">{{ t()('start.parent.help') }}</p>
     <div class="pair">
       <k-field
@@ -45,8 +45,8 @@
     }
   </section>
 
-  <section class="step">
-    <k-section-title [step]="2" [title]="t()('start.subtask.title')" />
+  <section class="block">
+    <k-section-title variant="step" [step]="2" [title]="t()('start.subtask.title')" />
     <p class="help">{{ t()('start.subtask.help') }}</p>
     <div class="choices" role="group" [attr.aria-label]="t()('start.subtask.choices')">
       <div class="chips">
@@ -63,7 +63,7 @@
         [label]="t()('start.subtask.name')"
         [placeholder]="t()('start.subtask.namePlaceholder')"
         [value]="form().subtask"
-        [error]="fieldError('subtask')"
+        [error]="fieldError('subtask-name')"
         (valueChange)="patch({ subtask: $event })"
         (submitted)="submit()"
       />
@@ -73,6 +73,7 @@
         [label]="t()('start.subtask.id')"
         [placeholder]="t()('start.subtask.idPlaceholder')"
         [value]="form().subtaskId"
+        [error]="fieldError('subtask-id')"
         (valueChange)="patch({ subtaskId: $event })"
         (submitted)="submit()"
       />
@@ -80,8 +81,8 @@
     <p class="help">{{ t()('start.subtask.hint') }}</p>
   </section>
 
-  <section class="step">
-    <k-section-title [step]="3" [title]="t()('start.time.title')" />
+  <section class="block">
+    <k-section-title variant="step" [step]="3" [title]="t()('start.time.title')" />
     <p class="help">{{ t()('start.time.help') }}</p>
     <div class="pair">
       <k-field

@@ -11,6 +11,7 @@ export const SCENARIOS = [
   'long-names',
   'no-recent',
   'claude-launched',
+  'quit',
 ] as const;
 export type ScenarioName = (typeof SCENARIOS)[number];
 
@@ -28,11 +29,19 @@ export const MOCK_HOME = '/Users/lucas';
 const LOCKED: BridgeError = { code: 'db_unavailable', message: "La base de Kairos est inaccessible : un autre programme l'utilise. Réessaie dans un instant." };
 const NEWER: BridgeError = { code: 'db_newer', message: "La base de Kairos a été écrite par une version plus récente de l'app : mets l'app à jour." };
 
-const lot = (id: number, parent: string | null, subtask: string | null, label: string | null = null, name: string | null = null): LotView => ({
+const lot = (
+  id: number,
+  parent: string | null,
+  subtask: string | null,
+  label: string | null = null,
+  name: string | null = null,
+  subtaskId: string | null = null,
+): LotView => ({
   id,
   parent_monday_id: parent,
   parent_label: label,
   subtask,
+  subtask_monday_id: subtaskId,
   name,
 });
 
@@ -73,7 +82,7 @@ function recents(lots: LotView[], now: number, currentId: number | null): Recent
 
 /** Les écrans-types, relatifs à `now` (secondes) pour que les heures restent plausibles. */
 export function scenario(name: ScenarioName, now: number): Scenario {
-  const refonte = lot(1, '12406850311', 'Front', 'Refonte du tableau de bord');
+  const refonte = lot(1, '12406850311', 'Front', 'Refonte du tableau de bord', null, '12406850412');
   const api = lot(2, '98765432100', 'Back', 'API de facturation');
   const noId = lot(3, null, 'Front', null, 'Réunion de cadrage');
   const long = lot(
@@ -94,6 +103,7 @@ export function scenario(name: ScenarioName, now: number): Scenario {
       return { snapshot: snapshotOf({ state: 'idle' }, earlier, recents([refonte, api, noId], now, null), now) };
     case 'running':
     case 'switching':
+    case 'quit':
       return { snapshot: running(refonte, 'manual', null) };
     case 'claude-launched':
       return { snapshot: running(refonte, 'claude-code', `${MOCK_HOME}/Beeside/main`) };

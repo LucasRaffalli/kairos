@@ -40,6 +40,18 @@ export class RunningView {
     return status ? lotTitle(status.lot) : '';
   });
 
+  /** « parent 12406850311 · sous-tâche 12406850412 », sans les ID inconnus (un lot sans ID n'en a aucun). */
+  protected readonly ids = computed(() => {
+    const lot = this.status()?.lot;
+    const t = this.t();
+    return [
+      lot?.parent_monday_id ? fill(t('running.parent'), { id: lot.parent_monday_id }) : null,
+      lot?.subtask_monday_id ? fill(t('running.subtaskId'), { id: lot.subtask_monday_id }) : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  });
+
   protected readonly clock = computed(() => formatClock(this.store.clockSeconds()));
   /** Lu par les lecteurs d'écran à la place du chrono : ne change qu'à la minute. */
   protected readonly clockSpoken = computed(() => fill(this.t()('running.clock'), { duration: formatHm(this.store.clockSeconds()) }));

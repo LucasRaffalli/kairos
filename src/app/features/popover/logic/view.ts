@@ -1,5 +1,7 @@
 import type { LotView, RecentLot, Status } from '@app/services/kairos/kairos-api';
 
+import { formatHm } from './clock';
+
 export type ViewName = 'start' | 'running' | 'paused' | 'switch';
 
 /** L'écran à montrer. « Changer de lot » n'a de sens que si un lot existe (en cours ou en pause). */
@@ -43,4 +45,16 @@ export function quickResumes(recent: RecentLot[], limit: number): LotView[] {
     .filter((item) => !item.current)
     .slice(0, limit)
     .map((item) => item.lot);
+}
+
+/**
+ * Le lot que « Arrêter le lot et quitter » arrêterait, comme la maquette 230:456 : « Front ·
+ * 12406850311 · 0 h 42 » (sous-tâche · ID · durée), le nom du lot à défaut de sous-tâche.
+ * `null` quand rien ne tourne : le dialogue n'a alors plus d'objet.
+ */
+export function quitSummary(status: Status, seconds: number): string | null {
+  if (status.state === 'idle') {
+    return null;
+  }
+  return [status.lot.subtask || lotTitle(status.lot), status.lot.parent_monday_id, formatHm(seconds)].filter(Boolean).join(' · ');
 }

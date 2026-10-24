@@ -14,9 +14,10 @@ export class MockKairosApi implements KairosApi {
   private served = 0;
   private nextId = 100;
   private readonly changed = new Set<() => void>();
+  private readonly quitRequested = new Set<() => void>();
 
   constructor(
-    name: ScenarioName,
+    private readonly name: ScenarioName,
     private readonly nowMs: () => number = Date.now,
     private readonly delayMs = 80,
   ) {
@@ -91,8 +92,18 @@ export class MockKairosApi implements KairosApi {
 
   async quit(_stopLot: boolean): Promise<void> {}
 
-  onQuitRequested(_callback: () => void): () => void {
-    return () => {};
+  onQuitRequested(callback: () => void): () => void {
+    this.quitRequested.add(callback);
+    // Le scénario « quit » demande de quitter tout seul, comme ⌘Q, pour montrer le dialogue.
+    if (this.name === 'quit') {
+      setTimeout(() => this.requestQuit(), this.delayMs * 3);
+    }
+    return () => this.quitRequested.delete(callback);
+  }
+
+  /** Simule ⌘Q (ou « Quitter Kairos » du menu de l'icône) alors qu'un lot tourne. */
+  requestQuit(): void {
+    this.quitRequested.forEach((callback) => callback());
   }
 
   private wait(): Promise<void> {
@@ -113,6 +124,7 @@ export class MockKairosApi implements KairosApi {
       parent_monday_id: request.parent_monday_id ?? null,
       parent_label: request.parent_label ?? null,
       subtask: request.subtask ?? this.current.choices.main,
+      subtask_monday_id: request.subtask_monday_id ?? null,
       name: request.name ?? null,
     };
     this.open(lot, request.at ?? secondsOf(this.nowMs()), 'manual', null);

@@ -47,6 +47,7 @@ export const en: Record<keyof typeof fr, string> = {
 
   'running.clock': 'Duration: {duration}',
   'running.parent': 'parent {id}',
+  'running.subtaskId': 'subtask {id}',
   'running.pausedSince': 'Paused since {time}',
   'running.stop': 'Stop',
   'running.pause': 'Pause',
