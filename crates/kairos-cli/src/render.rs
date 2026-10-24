@@ -12,7 +12,8 @@ pub enum Outcome {
     Resumed(StartedLot),
     Stopped(StoppedEntry),
     Paused(StoppedEntry),
-    Switched(SwitchResult),
+    // En boîte : le plus gros des résultats (deux lots), pour garder l'énumération compacte.
+    Switched(Box<SwitchResult>),
     Status(Status),
     Today(DayView),
     Report(Report),

@@ -459,6 +459,7 @@ mod tests {
             parent_monday_id: Some("12406850311".into()),
             parent_label: None,
             subtask: Some("Front".into()),
+            subtask_monday_id: None,
             name: None,
         }
     }

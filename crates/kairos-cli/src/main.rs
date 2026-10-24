@@ -143,7 +143,7 @@ fn execute(k: &Kairos<AppClock>, command: Command) -> Result<(Outcome, Offsets)>
         Command::Stop { at } => Outcome::Stopped(k.stop(optional_time(&at, &today())?)?),
         Command::Pause => Outcome::Paused(k.pause()?),
         Command::Resume => Outcome::Resumed(k.resume()?),
-        Command::Switch(a) => Outcome::Switched(k.switch_to(start_args(a)?)?),
+        Command::Switch(a) => Outcome::Switched(Box::new(k.switch_to(start_args(a)?)?)),
         Command::Status => Outcome::Status(k.status()?),
         Command::Today { date } => Outcome::Today(k.today(date.as_deref())?),
         Command::Report { date } => Outcome::Report(k.report(date.as_deref())?),
@@ -202,7 +202,7 @@ fn execute(k: &Kairos<AppClock>, command: Command) -> Result<(Outcome, Offsets)>
             Outcome::SubtaskId { parent, subtask }
         }
         Command::Recent { limit } => Outcome::Recent(k.recent_lots(limit)?),
-        Command::Back => Outcome::Switched(k.back(Source::Manual, current_dir())?),
+        Command::Back => Outcome::Switched(Box::new(k.back(Source::Manual, current_dir())?)),
         Command::Label { id, name } => {
             let label = k.set_label(&id, &name)?;
             Outcome::Label { parent: id, label }

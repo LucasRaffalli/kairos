@@ -732,9 +732,9 @@ fn subtask_name_of(ctx: &Ctx, id: i64) -> Result<String> {
 
 fn lot_view(ctx: &Ctx, lot_id: i64) -> Result<LotView> {
     Ok(ctx.tx.query_row(
-        "SELECT l.id, p.monday_id, p.label, s.name, l.name FROM lots l LEFT JOIN parents p ON p.id = l.parent_id LEFT JOIN subtasks s ON s.id = l.subtask_id WHERE l.id = ?1",
+        "SELECT l.id, p.monday_id, p.label, s.name, s.monday_item_id, l.name FROM lots l LEFT JOIN parents p ON p.id = l.parent_id LEFT JOIN subtasks s ON s.id = l.subtask_id WHERE l.id = ?1",
         [lot_id],
-        |row| Ok(LotView { id: row.get(0)?, parent_monday_id: row.get(1)?, parent_label: row.get(2)?, subtask: row.get(3)?, name: row.get(4)? }),
+        |row| Ok(LotView { id: row.get(0)?, parent_monday_id: row.get(1)?, parent_label: row.get(2)?, subtask: row.get(3)?, subtask_monday_id: row.get(4)?, name: row.get(5)? }),
     )?)
 }
 

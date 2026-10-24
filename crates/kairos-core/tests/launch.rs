@@ -298,3 +298,48 @@ fn overview_reads_status_today_recent_and_choices_together() {
     k.pause().unwrap();
     assert_eq!(k.overview(8, None).unwrap().choices.own, ["Retour icône"]);
 }
+
+/// L'ID de sous-tâche d'un lot : `Running.lot`.
+fn running_subtask_id(status: Status) -> Option<String> {
+    match status {
+        Status::Running { lot, .. } => lot.subtask_monday_id,
+        other => panic!("lot attendu en cours, vu {other:?}"),
+    }
+}
+
+#[test]
+fn a_lot_shows_its_subtask_monday_id_when_known() {
+    let (k, _d) = kairos();
+    // Sans ID de sous-tâche : absent.
+    k.start(launched("12406850311", Source::Manual, None))
+        .unwrap();
+    assert_eq!(running_subtask_id(k.status().unwrap()), None);
+    k.stop(None).unwrap();
+
+    // Posé au lancement.
+    k.start(StartArgs {
+        subtask: Some("Back".into()),
+        subtask_monday_id: Some("12406850412".into()),
+        ..launched("12406850311", Source::Manual, None)
+    })
+    .unwrap();
+    assert_eq!(
+        running_subtask_id(k.status().unwrap()).as_deref(),
+        Some("12406850412")
+    );
+    k.stop(None).unwrap();
+
+    // Posé après coup par set_subtask_id sur une sous-tâche propre au parent.
+    k.start(StartArgs {
+        subtask: Some("Retour icône".into()),
+        ..launched("12406850311", Source::Manual, None)
+    })
+    .unwrap();
+    assert_eq!(running_subtask_id(k.status().unwrap()), None);
+    k.set_subtask_id("12406850311", "Retour icône", "12406850999")
+        .unwrap();
+    assert_eq!(
+        running_subtask_id(k.status().unwrap()).as_deref(),
+        Some("12406850999")
+    );
+}

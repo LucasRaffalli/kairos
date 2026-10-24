@@ -69,6 +69,8 @@ pub struct LotView {
     pub parent_monday_id: Option<String>,
     pub parent_label: Option<String>,
     pub subtask: Option<String>,
+    /// L'ID Monday de la sous-tâche, quand il est connu (posé au lancement ou par `set_subtask_id`).
+    pub subtask_monday_id: Option<String>,
     pub name: Option<String>,
 }
 
@@ -270,6 +272,7 @@ mod tests {
             parent_monday_id: id.map(str::to_string),
             parent_label: None,
             subtask: sub.map(str::to_string),
+            subtask_monday_id: None,
             name: name.map(str::to_string),
         };
         assert_eq!(

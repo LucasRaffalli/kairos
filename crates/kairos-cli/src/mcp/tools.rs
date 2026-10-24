@@ -331,7 +331,7 @@ fn dispatch<C: Clock>(
             if name == "start" {
                 Outcome::Started(k.start(start)?)
             } else {
-                Outcome::Switched(k.switch_to(start)?)
+                Outcome::Switched(Box::new(k.switch_to(start)?))
             }
         }
         "stop" => {
@@ -388,7 +388,7 @@ fn dispatch<C: Clock>(
         }
         "back" => {
             let _: NoParams = parse(args)?;
-            Outcome::Switched(k.back(source, None)?)
+            Outcome::Switched(Box::new(k.back(source, None)?))
         }
         "set_label" => {
             let p: SetLabelParams = parse(args)?;
