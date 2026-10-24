@@ -3,6 +3,7 @@
 
 pub mod clock;
 pub mod db;
+pub mod detect;
 pub mod error;
 pub mod model;
 pub mod report;
