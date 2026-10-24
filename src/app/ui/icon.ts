@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-export type IconName = 'play' | 'stop' | 'pause' | 'swap' | 'alert' | 'info';
+export type IconName = 'play' | 'stop' | 'pause' | 'swap' | 'alert' | 'info' | 'term';
 
 /** Un glyphe de 16 px au trait, à la couleur du texte autour (`currentColor`). Décoratif : le sens passe par le texte. */
 @Component({
@@ -31,6 +31,9 @@ export type IconName = 'play' | 'stop' | 'pause' | 'swap' | 'alert' | 'info';
         }
         @case ('alert') {
           <path d="M8 2.5 14 13H2zM8 6.5v3M8 11.5v.01" />
+        }
+        @case ('term') {
+          <path d="M3 4.5 6.5 8 3 11.5M8.5 11.5H13" />
         }
         @case ('info') {
           <circle cx="8" cy="8" r="5.5" />

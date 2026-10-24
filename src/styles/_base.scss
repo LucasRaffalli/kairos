@@ -10,6 +10,8 @@
   --font-size-sm: 12px;
   --font-size-md: 13px;
   --font-size-lg: 15px;
+  // Le grand chrono du minuteur.
+  --font-size-display: 40px;
 
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -68,4 +70,14 @@ body {
 .focus-ring.is-invalid:focus-within {
   border-color: var(--color-status-danger);
   box-shadow: 0 0 0 3px var(--color-status-danger-ring);
+}
+
+// Lu par les lecteurs d'écran, invisible à l'écran (état annoncé, durée lisible du chrono).
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

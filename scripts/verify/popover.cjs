@@ -38,7 +38,17 @@ function bundle(entries) {
 
 const L = 'src/app/features/popover/logic';
 const S = 'src/app/services/kairos';
-const lib = bundle([`${L}/clock.ts`, `${L}/form.ts`, `${L}/view.ts`, `${L}/launch.ts`, `${L}/errors.ts`, `${S}/mock-kairos-api.ts`, `${S}/kairos.store.ts`]);
+const lib = bundle([
+  `${L}/clock.ts`,
+  `${L}/form.ts`,
+  `${L}/view.ts`,
+  `${L}/launch.ts`,
+  `${L}/errors.ts`,
+  `${L}/today.ts`,
+  'src/app/lang/fill.ts',
+  `${S}/mock-kairos-api.ts`,
+  `${S}/kairos.store.ts`,
+]);
 
 // --- 1. Formats de durée ------------------------------------------------------
 check('formatClock 2533', lib.formatClock(2533) === '00:42:13');
@@ -111,22 +121,86 @@ for (const key of ['', '1', 'Réunion', '12406850311', 'x'.repeat(500), '😀'])
 }
 check('parentColorIndex dans 0..5', inRange);
 
-// --- 5. Libellé de lancement --------------------------------------------------
+// --- 5. Libellé de lancement : des morceaux, que la vue traduit -------------------
 const hm = () => '13:34';
 const launch = (over) => lib.describeLaunch({ source: 'manual', startedAt: 0, workdir: null, home: '/Users/aegis', hm, ...over });
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 check(
   'Claude Code sous le dossier personnel',
-  launch({ source: 'claude-code', workdir: '/Users/aegis/Beeside/main' }) === 'Lancé par Claude Code à 13:34 · ~/Beeside/main',
+  same(launch({ source: 'claude-code', workdir: '/Users/aegis/Beeside/main' }), { who: 'claude-code', time: '13:34', folder: '~/Beeside/main' }),
+  JSON.stringify(launch({ source: 'claude-code', workdir: '/Users/aegis/Beeside/main' })),
 );
-check('dossier hors du dossier personnel', launch({ source: 'claude-code', workdir: '/tmp/a/b/c' }) === 'Lancé par Claude Code à 13:34 · …/b/c');
-check('manuel sans dossier', launch({}) === 'Lancé à 13:34');
-check('source absente', launch({ source: null }) === 'Lancé à 13:34');
-check('Claude Desktop', launch({ source: 'claude-desktop' }) === 'Lancé par Claude Desktop à 13:34');
-check('dossier = dossier personnel', launch({ workdir: '/Users/aegis' }) === 'Lancé à 13:34 · ~');
+check('dossier hors du dossier personnel', launch({ source: 'claude-code', workdir: '/tmp/a/b/c' }).folder === '…/b/c');
+check('manuel sans dossier', same(launch({}), { who: null, time: '13:34', folder: null }));
+check('source absente : lancé à la main', launch({ source: null }).who === null && launch({ source: undefined }).who === null);
+check('source inconnue : repli, jamais « undefined »', launch({ source: 'cursor' }).who === null);
+check('Claude Desktop', launch({ source: 'claude-desktop' }).who === 'claude-desktop');
+check('dossier = dossier personnel', launch({ workdir: '/Users/aegis' }).folder === '~');
 check(
   'le début est passé à hm',
-  lib.describeLaunch({ source: null, startedAt: local(2026, 9, 23, 8, 7), workdir: null, home: '', hm: lib.formatTimeOfDay }) === 'Lancé à 08:07',
+  lib.describeLaunch({ source: null, startedAt: local(2026, 9, 23, 8, 7), workdir: null, home: '', hm: lib.formatTimeOfDay }).time === '08:07',
 );
+{
+  // Les commentaires peuvent citer le libellé ; le code, non.
+  const code = require('fs')
+    .readFileSync(path.join(REPO, L, 'launch.ts'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '');
+  check('aucun texte en dur dans launch.ts', !/Lancé|par Claude/.test(code));
+}
+
+// --- 5 bis. Textes à trous, puces, récents, lots ---------------------------------
+check('fill remplace les trous', lib.fill('Lancé à {time} · {folder}', { time: '13:34', folder: '~' }) === 'Lancé à 13:34 · ~');
+check('fill laisse un trou inconnu', lib.fill('a {x}', {}) === 'a {x}');
+check(
+  'puces : le poste principal d’abord, puis le socle et les propres, sans doublon',
+  same(lib.subtaskChips({ main: 'Front', base: ['Back', 'Front', 'Recettage'], own: ['Recette', 'Back'] }), ['Front', 'Back', 'Recettage', 'Recette']),
+);
+const L1 = { id: 1, parent_monday_id: '111', parent_label: 'Refonte', subtask: 'Front', name: null };
+const L2 = { id: 2, parent_monday_id: '111', parent_label: 'Refonte', subtask: 'Back', name: null };
+const L3 = { id: 3, parent_monday_id: null, parent_label: null, subtask: 'Front', name: 'Réunion' };
+const L4 = { id: 4, parent_monday_id: '222', parent_label: null, subtask: 'Front', name: null };
+const L5 = { id: 5, parent_monday_id: '333', parent_label: 'Factu', subtask: 'Front', name: null };
+const rec = (lot, current = false) => ({ lot, last_end: 0, today_total: 0, current });
+check(
+  'récents : un parent par ID, sans les lots sans ID',
+  same(lib.recentParents([rec(L1), rec(L2), rec(L3), rec(L4), rec(L5)], 2), [
+    { id: '111', name: 'Refonte' },
+    { id: '222', name: '' },
+  ]),
+  JSON.stringify(lib.recentParents([rec(L1), rec(L2), rec(L3), rec(L4), rec(L5)], 2)),
+);
+check(
+  'reprendre : trois lots, sans le lot en cours',
+  same(
+    lib.quickResumes([rec(L1, true), rec(L2), rec(L3), rec(L4), rec(L5)], 3).map((l) => l.id),
+    [2, 3, 4],
+  ),
+);
+check('titre d’un lot : libellé, sinon nom, sinon ID', lib.lotTitle(L1) === 'Refonte' && lib.lotTitle(L3) === 'Réunion' && lib.lotTitle(L4) === '222');
+const r1 = lib.lotRequest(L1);
+check(
+  'relancer un lot avec ID',
+  r1.parent_monday_id === '111' && r1.parent_label === 'Refonte' && r1.name === null && r1.subtask === 'Front' && r1.at === null,
+);
+const r3 = lib.lotRequest(L3);
+check('relancer un lot sans ID : par son nom', r3.parent_monday_id === null && r3.name === 'Réunion' && r3.subtask === 'Front');
+
+// --- 5 ter. La liste du jour ------------------------------------------------------
+{
+  const e = (id, lot, start, end, removed = false) => ({ id, lot, start, end, removed });
+  const day = { entries: [e(1, L1, 1000, 2000), e(2, L2, 2100, 2200, true), e(3, L3, 3000, null)] };
+  const { rows, total } = lib.todayRows(day, 50);
+  check(
+    'jour : sans les entrées supprimées, la plus récente d’abord',
+    same(
+      rows.map((r) => r.id),
+      [3, 1],
+    ),
+  );
+  check('jour : l’entrée ouverte compte le chrono', rows[0].open === true && rows[0].seconds === 50 && rows[1].seconds === 1000);
+  check('jour : total vivant', total === 1050);
+}
 
 // --- 6. Champ d'une erreur ----------------------------------------------------
 check('invalid_monday_id : parent', lib.errorField('invalid_monday_id') === 'parent');
@@ -134,6 +208,86 @@ check('invalid_name : parent', lib.errorField('invalid_name') === 'parent');
 check('invalid_name d’une sous-tâche perso', lib.errorField('invalid_name', true) === 'subtask');
 check('in_future, too_old : début', lib.errorField('in_future') === 'time' && lib.errorField('too_old') === 'time');
 check('db_unavailable : bandeau', lib.errorField('db_unavailable') === null);
+
+// --- 6 bis. Les vues, par lecture du source -------------------------------------
+{
+  const fs = require('fs');
+  const P = path.join(REPO, 'src', 'app', 'features', 'popover');
+  const read = (file) => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '');
+  const VIEWS = ['start-view', 'running-view', 'today-list', 'error-banner', 'quit-dialog'];
+  for (const view of VIEWS) {
+    check(`${view}.ts existe`, fs.existsSync(path.join(P, `${view}.ts`)));
+  }
+
+  // Tout le source de l'interface, pour les règles qui le traversent.
+  const walk = (dir) =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? walk(path.join(dir, d.name)) : [path.join(dir, d.name)]));
+  const appFiles = walk(path.join(REPO, 'src', 'app')).filter((f) => /\.(ts|html)$/.test(f));
+  const SHELL = path.join(P, 'popover.ts');
+  for (const file of appFiles) {
+    if (file === SHELL) continue;
+    const text = read(file);
+    check(`${path.relative(REPO, file)} ne ferme pas la fenêtre`, !/\.(hide|close)\(/.test(text));
+  }
+  const shell = read(SHELL);
+  const closes = shell.match(/\.(hide|close)\(/g) ?? [];
+  check('la coquille ne ferme qu’une fois, sur Échap', closes.length === 1 && /'Escape'/.test(shell), closes.join());
+  check('la coquille : ⌘↵ et ⌘.', /metaKey/.test(shell) && /'Enter'/.test(shell) && /'\.'/.test(shell));
+  check('la coquille : la hauteur suit le contenu', /ResizeObserver/.test(shell) && /setPopoverHeight/.test(shell));
+  check('la coquille : dialogue Quitter sur onQuitRequested', /onQuitRequested/.test(shell));
+  check('la coquille : ?scenario=switching ouvre « Changer de lot »', /'switching'/.test(shell) && /openSwitch\(\)/.test(shell));
+  const shellHtml = read(path.join(P, 'popover.html'));
+  check('la coquille : aria-live="polite"', /aria-live="polite"/.test(shellHtml));
+  check('la coquille : vue grisée quand stale', /stale\(\)/.test(shellHtml));
+  check(
+    'closeSwitch a un appelant',
+    appFiles.some((f) => !f.endsWith('kairos.store.ts') && /closeSwitch\(\)/.test(read(f))),
+  );
+
+  // Les clés de traduction utilisées par les vues existent en fr ET en en.
+  const keysOf = (file) => new Set([...read(path.join(REPO, 'src', 'app', 'lang', file)).matchAll(/^\s*'([\w.-]+)':/gm)].map((m) => m[1]));
+  const fr = keysOf('fr.ts');
+  const en = keysOf('en.ts');
+  const viewFiles = fs
+    .readdirSync(P)
+    .filter((f) => /\.(ts|html)$/.test(f))
+    .map((f) => path.join(P, f));
+  const used = new Set();
+  for (const file of viewFiles) {
+    for (const m of read(file).matchAll(/'((?:popover|start|running|today|error|quit|launch|switch|paused)\.[\w.-]+)'/g)) used.add(m[1]);
+  }
+  check('les vues utilisent des clés de traduction', used.size >= 20, String(used.size));
+  for (const key of used) {
+    check(`clé « ${key} » en fr et en en`, fr.has(key) && en.has(key));
+  }
+
+  // Rien de ce qui arrive après 2a : heures de fin, calendrier, engrenage, clôture, ⌘K.
+  const texts = viewFiles.map(read).join('\n') + read(path.join(REPO, 'src', 'app', 'lang', 'fr.ts')) + read(path.join(REPO, 'src', 'app', 'lang', 'en.ts'));
+  for (const [label, re] of [
+    ['« Fin dans »', /Fin dans|End in/],
+    ['le champ « Fin »', /'Fin'|Fin vide|Fin choisie|'End'/],
+    ['le calendrier', /calendar|calendrier/i],
+    ['l’engrenage', /gear|engrenage|réglages|settings/i],
+    ['« Clôturer la journée »', /Clôturer|Close the day/],
+    ['« ⌘K »', /⌘K|⌘⇧K/],
+  ]) {
+    check(`les vues n’affichent pas ${label}`, !re.test(texts));
+  }
+
+  // Styles des vues : que des tokens (px permis pour les tailles fixes).
+  for (const file of fs.readdirSync(P).filter((f) => f.endsWith('.scss'))) {
+    const css = read(path.join(P, file))
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    check(`${file} : aucune couleur littérale`, !/#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(|(?<![\w-])(black|white)(?![\w-])/.test(css));
+    for (const prop of ['font-size', 'border-radius']) {
+      for (const m of css.matchAll(new RegExp(`(?<![\\w-])${prop}\\s*:\\s*([^;]+);`, 'g'))) {
+        const value = m[1].trim();
+        check(`${file} : ${prop} vient d'un token`, /^var\(--[\w-]+\)$/.test(value) || value === 'inherit' || value === '0', value);
+      }
+    }
+  }
+}
 
 // --- 7. Le magasin, sur le faux pont ------------------------------------------
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
@@ -329,6 +483,76 @@ function spied(scenarioName, now = () => NOW0) {
       'switchLot : appel switch, retour à « en cours »',
       calls.includes('switch') && store.view() === 'running' && store.snapshot().status.lot.parent_monday_id === '555',
     );
+    store.dispose();
+  }
+
+  // Annuler « Changer de lot » rend la vue « en cours ».
+  {
+    const { api } = spied('running');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    store.openSwitch();
+    store.closeSwitch();
+    check('closeSwitch : retour à « en cours »', store.view() === 'running');
+    store.dispose();
+  }
+
+  // Arrêter pendant « Changer de lot » referme le panneau : un lot lancé ensuite (ailleurs) s'affiche en cours.
+  {
+    const { api, inner } = spied('running');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    store.openSwitch();
+    await store.stop();
+    await inner.start({ parent_monday_id: '8' });
+    await tick();
+    check('stop referme « Changer de lot »', store.view() === 'running');
+    store.dispose();
+  }
+
+  // Relancer un lot récent : start au repos, switch quand un lot tourne.
+  {
+    const { api, calls } = spied('idle');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    store.form.update((f) => ({ ...f, parentName: 'brouillon' }));
+    await store.launchRecent({ id: 9, parent_monday_id: '444', parent_label: 'X', subtask: 'Back', name: null });
+    check('lot récent au repos : start', calls.includes('start') && !calls.includes('switch') && store.view() === 'running');
+    check('lot récent : le brouillon reste', store.form().parentName === 'brouillon');
+    await store.launchRecent({ id: 10, parent_monday_id: '555', parent_label: 'Y', subtask: 'Front', name: null });
+    check('lot récent pendant un lot : switch', calls.includes('switch') && store.snapshot().status.lot.parent_monday_id === '555');
+    store.dispose();
+  }
+
+  // Les puces suivent le parent saisi ; une réponse en retard n'écrase pas la dernière.
+  {
+    const { api } = spied('idle');
+    const answers = {};
+    api.override = {
+      subtaskChoices: (parent) => new Promise((resolve) => (answers[parent ?? 'none'] = resolve)),
+    };
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    check('puces : celles du relevé par défaut', store.choices().main === 'Front');
+    const first = store.loadChoices('1');
+    const second = store.loadChoices('2');
+    answers['2']({ main: 'Front', base: [], own: ['Deux'] });
+    await second;
+    answers['1']({ main: 'Front', base: [], own: ['Un'] });
+    await first;
+    check('puces : la dernière demande gagne', store.choices().own[0] === 'Deux', JSON.stringify(store.choices()));
+    store.dispose();
+  }
+
+  // already_running rendu silencieux : le brouillon est GARDÉ (le lot affiché n'est pas forcément le sien).
+  {
+    const { api, inner } = spied('idle');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    await inner.start({ parent_monday_id: '77' });
+    store.form.update((f) => ({ ...f, parentId: '5' }));
+    await store.start();
+    check('already_running silencieux : brouillon gardé', store.form().parentId === '5' && store.error() === null);
     store.dispose();
   }
 

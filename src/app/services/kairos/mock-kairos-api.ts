@@ -44,7 +44,7 @@ export class MockKairosApi implements KairosApi {
 
   async switch(request: StartRequest): Promise<void> {
     await this.act();
-    this.close();
+    this.closeOpenEntry();
     this.begin(request);
   }
 
@@ -53,7 +53,7 @@ export class MockKairosApi implements KairosApi {
     if (this.current.status.state === 'idle') {
       throw { code: 'nothing_running', message: 'Aucun lot en cours.' } satisfies BridgeError;
     }
-    this.close();
+    this.closeOpenEntry();
     this.update({ state: 'idle' });
   }
 
@@ -64,7 +64,7 @@ export class MockKairosApi implements KairosApi {
       throw { code: 'nothing_running', message: 'Aucun lot en cours.' } satisfies BridgeError;
     }
     const now = secondsOf(this.nowMs());
-    this.close();
+    this.closeOpenEntry();
     this.update({ state: 'paused', lot: status.lot, since: now, duration: now - status.since, launched_by: status.launched_by, workdir: status.workdir });
   }
 
@@ -128,7 +128,7 @@ export class MockKairosApi implements KairosApi {
   }
 
   /** Ferme l'entrée ouverte, s'il y en a une. */
-  private close(): void {
+  private closeOpenEntry(): void {
     const now = secondsOf(this.nowMs());
     const entries = this.current.today.entries.map((e) => (e.end === null ? { ...e, end: now } : e));
     this.current = { ...this.current, today: dayOf(entries, now) };

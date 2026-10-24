@@ -1,7 +1,27 @@
-<header class="head">
-  <span class="mark" aria-hidden="true"></span>
-  <div class="who">
-    <strong>{{ t()('popover.title') }}</strong>
-    <span class="meta">{{ today() }} · {{ t()('popover.idle') }}</span>
-  </div>
-</header>
+<div class="frame" #frame>
+  @if (quitting()) {
+    <app-quit-dialog [summary]="quitSummary()" (stopAndQuit)="quit(true)" (keepAndQuit)="quit(false)" (cancelled)="quitting.set(false)" />
+  } @else {
+    <k-popover-header [title]="t()('popover.title')" [subtitle]="subtitle()" />
+    @if (bannerError(); as error) {
+      <app-error-banner [message]="error.message" [retryable]="store.stale()" (retry)="store.reload()" />
+    }
+    @if (store.snapshot()) {
+      <!-- Base inaccessible : la dernière vue connue reste, grisée et inerte ; seul le bandeau agit. -->
+      <div class="view" [class.stale]="store.stale()" [attr.inert]="store.stale() ? '' : null">
+        @switch (store.view()) {
+          @case ('start') {
+            <app-start-view mode="start" />
+          }
+          @case ('switch') {
+            <app-start-view mode="switch" />
+          }
+          @default {
+            <app-running-view />
+          }
+        }
+      </div>
+    }
+  }
+  <p class="sr-only" aria-live="polite">{{ liveText() }}</p>
+</div>

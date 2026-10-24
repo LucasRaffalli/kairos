@@ -1,10 +1,10 @@
 import { computed, signal } from '@angular/core';
 
-import { emptyForm, canSubmit, toStartRequest, type FormDraft } from '@app/features/popover/logic/form';
+import { emptyForm, canSubmit, lotRequest, toStartRequest, type FormDraft } from '@app/features/popover/logic/form';
 import { isStaleCode } from '@app/features/popover/logic/errors';
 import { pickView, type ViewName } from '@app/features/popover/logic/view';
 
-import { toBridgeError, type BridgeError, type KairosApi, type Snapshot, type StartRequest } from './kairos-api';
+import { toBridgeError, type BridgeError, type KairosApi, type LotView, type Snapshot, type StartRequest, type SubtaskChoices } from './kairos-api';
 
 /**
  * L'état du popover : le dernier `Snapshot` du cœur, le brouillon du formulaire et l'action en cours.
@@ -19,6 +19,10 @@ export class KairosStore {
   private readonly _error = signal<BridgeError | null>(null);
   private readonly _stale = signal(false);
   private readonly _switching = signal(false);
+  /** Les puces demandées pour le parent saisi ; `null` : celles du dernier relevé. */
+  private readonly _choices = signal<SubtaskChoices | null>(null);
+  /** Numéro de la dernière demande de puces : une réponse plus ancienne arrivée après est ignorée. */
+  private choicesRequest = 0;
   /** L'heure locale lue au dernier battement, en millisecondes. */
   private readonly nowMs = signal(0);
   /** Avance du cœur sur le navigateur à la réception du dernier relevé, en millisecondes. */
@@ -36,6 +40,9 @@ export class KairosStore {
   readonly stale = this._stale.asReadonly();
   /** Le brouillon du formulaire « Lancer » / « Changer de lot ». */
   readonly form = signal<FormDraft>(emptyForm());
+
+  /** Les puces de sous-tâche du formulaire. */
+  readonly choices = computed<SubtaskChoices>(() => this._choices() ?? this._snapshot()?.choices ?? { main: '', base: [], own: [] });
 
   readonly view = computed<ViewName>(() => {
     const snapshot = this._snapshot();
@@ -91,6 +98,19 @@ export class KairosStore {
     }
   }
 
+  /** Redemande les puces quand le parent saisi change (`null` : aucun parent, le poste principal). */
+  async loadChoices(parent: string | null): Promise<void> {
+    const request = ++this.choicesRequest;
+    try {
+      const choices = await this.api.subtaskChoices(parent);
+      if (request === this.choicesRequest) {
+        this._choices.set(choices);
+      }
+    } catch {
+      // Sans réponse, on garde les puces affichées : le cœur jugera la sous-tâche au lancement.
+    }
+  }
+
   openSwitch(): void {
     this._switching.set(true);
   }
@@ -109,6 +129,16 @@ export class KairosStore {
   switchLot(): Promise<void> {
     const request = this.request();
     return request ? this.write(() => this.api.switch(request), true) : Promise.resolve();
+  }
+
+  /**
+   * « Reprendre » : relance un lot récent, maintenant. Au repos c'est un lancement, sinon un
+   * changement de lot. Le brouillon du formulaire n'est pas touché.
+   */
+  launchRecent(lot: LotView): Promise<void> {
+    const request = lotRequest(lot);
+    const idle = (this._snapshot()?.status.state ?? 'idle') === 'idle';
+    return this.write(() => (idle ? this.api.start(request) : this.api.switch(request)));
   }
 
   stop(): Promise<void> {
@@ -137,9 +167,10 @@ export class KairosStore {
     try {
       await action();
       await this.reload();
+      // Une action réussie montre son résultat : « Changer de lot » se referme toujours.
+      this._switching.set(false);
       if (fromForm) {
         this.form.set(emptyForm());
-        this._switching.set(false);
       }
     } catch (error) {
       await this.refused(toBridgeError(error));
@@ -150,7 +181,9 @@ export class KairosStore {
 
   /**
    * Un refus du cœur. `already_running` alors que l'écran montre déjà un lot en cours (double clic,
-   * ou lot lancé ailleurs entre-temps) n'est pas une erreur : on relit l'état et on se tait.
+   * ou lot lancé ailleurs entre-temps) n'est pas une erreur : on relit l'état et on se tait. Le
+   * brouillon est gardé : le lot affiché n'est pas forcément le sien (s'il l'était, le premier
+   * appel réussi l'a déjà vidé), et il sert tel quel à « Changer de lot ».
    */
   private async refused(error: BridgeError): Promise<void> {
     if (error.code === 'already_running') {

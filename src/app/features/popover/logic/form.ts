@@ -1,4 +1,4 @@
-import type { StartRequest } from '@app/services/kairos/kairos-api';
+import type { LotView, StartRequest, SubtaskChoices } from '@app/services/kairos/kairos-api';
 
 import { secondsFromHhmm } from './clock';
 
@@ -44,5 +44,23 @@ export function toStartRequest(form: FormDraft, nowMs: number): StartRequest {
     subtask: orNull(form.subtask),
     subtask_monday_id: orNull(form.subtaskId),
     at: form.time.trim() ? secondsFromHhmm(form.time, nowMs) : null,
+  };
+}
+
+/** Les puces de sous-tâche : le poste principal d'abord, puis le socle et celles du parent, sans doublon. */
+export function subtaskChips(choices: SubtaskChoices): string[] {
+  return [...new Set([choices.main, ...choices.base, ...choices.own])];
+}
+
+/** Relancer un lot connu (« Reprendre ») : son parent, ou son nom s'il n'a pas d'ID, et sa sous-tâche, maintenant. */
+export function lotRequest(lot: LotView): StartRequest {
+  const parentId = lot.parent_monday_id;
+  return {
+    parent_monday_id: parentId,
+    parent_label: parentId ? lot.parent_label : null,
+    name: parentId ? null : lot.name,
+    subtask: lot.subtask,
+    subtask_monday_id: null,
+    at: null,
   };
 }

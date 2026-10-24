@@ -1,0 +1,157 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// « Changer de lot » : le lot qui s'arrêtera.
+.current {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 10px var(--space-sm);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+}
+
+.current-text {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--font-size-sm);
+}
+
+.current-meta {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+}
+
+.current-clock {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.help {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: 1.35;
+}
+
+.pair {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+
+  .grow {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .id {
+    flex: none;
+    width: 120px;
+  }
+
+  .half {
+    width: calc(50% - 5px);
+  }
+}
+
+.recents {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.recents-label {
+  flex: none;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+}
+
+// Les puces défilent à l'horizontale ; « + Autre » reste visible à droite.
+.choices {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.chips {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: var(--space-xs);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px var(--space-sm);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  font-size: var(--font-size-sm);
+  min-width: 0;
+
+  strong {
+    font-weight: 600;
+  }
+}
+
+.muted {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.submit {
+  display: flex;
+}
+
+.hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+}
+
+.resumes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

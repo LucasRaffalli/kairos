@@ -1,0 +1,47 @@
+@if (status(); as s) {
+  <section class="lot">
+    <p class="clock" [class.frozen]="s.state === 'paused'" aria-hidden="true">{{ clock() }}</p>
+    <p class="sr-only">{{ clockSpoken() }}</p>
+    <h2 class="name" [title]="title()">{{ title() }}</h2>
+    @if (s.lot.subtask || s.lot.parent_monday_id) {
+      <div class="ticket">
+        @if (s.lot.subtask; as subtask) {
+          <k-badge [text]="subtask" [title]="subtask" />
+        }
+        @if (s.lot.parent_monday_id; as id) {
+          <span class="ids">{{ fill(t()('running.parent'), { id }) }}</span>
+        }
+      </div>
+    }
+    @if (pausedSince(); as text) {
+      <p class="line paused"><k-icon name="pause" />{{ text }}</p>
+    }
+    @if (launch(); as l) {
+      <p class="line" [title]="l.text">
+        @if (l.byClaude) {
+          <k-icon name="term" />
+        }
+        <span class="ellipsis">{{ l.text }}</span>
+      </p>
+    }
+  </section>
+
+  <div class="actions">
+    <k-button class="stop" variant="primary" icon="stop" kbd="⌘." [disabled]="store.busy()" (pressed)="store.stop()">{{ t()('running.stop') }}</k-button>
+    @if (s.state === 'paused') {
+      <k-button variant="ghost" icon="play" [disabled]="store.busy()" (pressed)="store.resume()">{{ t()('running.resume') }}</k-button>
+    } @else {
+      <k-button variant="ghost" icon="pause" [disabled]="store.busy()" (pressed)="store.pause()">{{ t()('running.pause') }}</k-button>
+    }
+    <k-button
+      variant="ghost"
+      icon="swap"
+      [ariaLabel]="t()('running.switch')"
+      [title]="t()('running.switch')"
+      [disabled]="store.busy()"
+      (pressed)="store.openSwitch()"
+    />
+  </div>
+
+  <app-today-list />
+}

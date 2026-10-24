@@ -1,7 +1,8 @@
 import type { Source } from '@app/services/kairos/kairos-api';
 
 export interface LaunchInfo {
-  source: Source | null | undefined;
+  /** Qui a lancé l'entrée, tel que le cœur l'a écrit (une valeur inconnue est tolérée). */
+  source: Source | string | null | undefined;
   /** Début de l'entrée, en secondes. */
   startedAt: number;
   workdir: string | null | undefined;
@@ -10,7 +11,13 @@ export interface LaunchInfo {
   hm: (seconds: number) => string;
 }
 
-const WHO: Record<Source, string> = { manual: '', 'claude-code': ' par Claude Code', 'claude-desktop': ' par Claude Desktop' };
+/** Les morceaux de « Lancé par Claude Code à 13:34 · ~/Beeside/main », que la vue traduit. */
+export interface LaunchParts {
+  /** `null` : lancé à la main, ou par une source inconnue (la vue dit alors « Lancé à … »). */
+  who: 'claude-code' | 'claude-desktop' | null;
+  time: string;
+  folder: string | null;
+}
 
 /** Les deux derniers composants d'un chemin, séparés par « / ». */
 const lastTwo = (parts: string[]): string => parts.slice(-2).join('/');
@@ -28,8 +35,7 @@ export function shortWorkdir(workdir: string, home: string): string {
   return `…/${lastTwo(path.split('/').filter(Boolean))}`;
 }
 
-/** « Lancé par Claude Code à 13:34 · ~/Beeside/main » ; « Lancé à 13:34 » pour un lancement à la main. */
-export function describeLaunch({ source, startedAt, workdir, home, hm }: LaunchInfo): string {
-  const text = `Lancé${WHO[source ?? 'manual']} à ${hm(startedAt)}`;
-  return workdir ? `${text} · ${shortWorkdir(workdir, home)}` : text;
+export function describeLaunch({ source, startedAt, workdir, home, hm }: LaunchInfo): LaunchParts {
+  const who = source === 'claude-code' || source === 'claude-desktop' ? source : null;
+  return { who, time: hm(startedAt), folder: workdir ? shortWorkdir(workdir, home) : null };
 }
