@@ -35,7 +35,7 @@ Les sources, **par ordre de fiabilité**. On prend la première qui donne **un s
 
 1. **Le message** : un lien Monday (`monday.com/…/pulses/<id>` ou `…/items/<id>`), ou un numéro nu de 10 à 11 chiffres sans zéro initial.
 2. **La branche Git** : un numéro de 10 à 11 chiffres dans son nom (`git -C <cwd> rev-parse --abbrev-ref HEAD`).
-3. **Les derniers commits** : `[Monday #<id>]` dans les 10 derniers messages (`git log -n 10`).
+3. **Les derniers commits** : `[Monday #<id>]` dans les 10 derniers messages (`git log -n 10`). **Un commit peut citer plusieurs IDs** : dans un même crochet (`[Monday #A, #B, #C]`, `[Monday #A #B]`) ou en plusieurs crochets (`[Monday #A] [Monday #B]`). Tous les nombres de 9 à 12 chiffres d'un crochet qui commence par « Monday » (sans tenir compte de la casse) sont lus.
 4. **`.kairos.json`** : cherché en remontant depuis le dossier de travail jusqu'à la racine du dépôt ; `{"parent": "…", "label": "…", "subtask": "…"}`, seul `parent` est obligatoire.
 
 Chaque lecture Git a un délai de 2 secondes ; un échec (pas un dépôt, Git absent, délai) vaut « pas de source », jamais une erreur.
@@ -72,6 +72,8 @@ Cas fréquent : une branche, trois tâches, trois IDs Monday dans les commits (`
 - **Un lot est en cours mais n'est pas dans l'ensemble** : doute (« Kairos suit X, la branche concerne A, B, C »).
 - **Tu passes à la tâche suivante** : tu donnes son ID dans le message (source sûre) et le hook bascule. Un commit `[Monday #B]` ne bascule jamais le lot tout seul, puisqu'il ne dit pas ce que tu fais maintenant.
 - **Le rapport du soir** garde une ligne par parent : chaque `switch` coupe l'entrée, donc le temps de A, B et C est bien séparé.
+
+Les commits sont d'ordinaire un par tâche, donc un ID chacun ; il arrive qu'un commit en cite plusieurs (il touche plusieurs tâches). Ses IDs entrent simplement dans l'ensemble, sans ordre entre eux : un commit à trois IDs donne le même ensemble que trois commits. **Kairos ne répartit jamais le temps entre les IDs d'un commit** : il ne sait pas combien de temps chaque tâche a pris. Le lot en cours reste celui que tu as annoncé (ou le doute demande lequel) ; si tu as travaillé sur les trois, tu bascules entre eux, ou tu corriges ensuite avec `add` / `edit`.
 
 Le dernier commit n'est qu'un indice affiché dans la question (« dernier commit : #C »), jamais une décision.
 
@@ -120,10 +122,11 @@ Le scénario type : Lucas est sur la feature Bundle, une urgence arrive, il donn
 7. Dépôt sans commits, tête détachée, dossier hors dépôt : pas de source, pas d'erreur.
 8. `.kairos.json` invalide ou sans `parent` : ignoré, avec une ligne sur la sortie d'erreur.
 9. Un ID de commit qui est la sous-tâche mémorisée d'un parent connu : le lot est ce parent et cette sous-tâche.
-10. Une branche avec trois parents dans les commits : lot en cours dans l'ensemble → silence ; rien en cours → une seule question, pas répétée au message suivant ; lot hors ensemble → doute.
-11. « Retourne sur Bundle » avec deux lots dont le libellé contient « bundle » : `recent` en rend deux, Claude demande lequel.
-12. `back` sans lot précédent, ou quand le lot précédent est déjà le lot en cours : `no_previous_lot`.
-13. `settings.json` absent (créé), vide (réécrit), invalide (refusé), avec des hooks d'autres outils (conservés).
+10. Un commit qui cite trois IDs (crochet unique, plusieurs crochets, séparateurs virgule, espace ou `&`) : les trois entrent dans l'ensemble ; un chiffre parasite dans le crochet (un numéro de version, une date) est ignoré s'il n'a pas 9 à 12 chiffres.
+11. Une branche avec trois parents dans les commits : lot en cours dans l'ensemble → silence ; rien en cours → une seule question, pas répétée au message suivant ; lot hors ensemble → doute.
+12. « Retourne sur Bundle » avec deux lots dont le libellé contient « bundle » : `recent` en rend deux, Claude demande lequel.
+13. `back` sans lot précédent, ou quand le lot précédent est déjà le lot en cours : `no_previous_lot`.
+14. `settings.json` absent (créé), vide (réécrit), invalide (refusé), avec des hooks d'autres outils (conservés).
 
 ## Tests
 
