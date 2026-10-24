@@ -248,3 +248,20 @@ fn data_version_changes_after_another_connection_writes() {
         .unwrap();
     assert_ne!(a.data_version().unwrap(), first);
 }
+
+#[test]
+fn back_remembers_the_given_workdir_or_none() {
+    let (k, _d) = kairos();
+    k.start(launched("111", Source::Manual, None)).unwrap();
+    k.clock().advance(600);
+    k.switch_to(launched("222", Source::Manual, None)).unwrap();
+    k.clock().advance(600);
+    k.back(Source::Manual, Some("/tmp/projet".into())).unwrap();
+    let (by, dir) = origin(k.status().unwrap());
+    assert_eq!(by, Some(Source::Manual));
+    assert_eq!(dir.as_deref(), Some("/tmp/projet"));
+
+    k.clock().advance(600);
+    k.back(Source::Manual, None).unwrap();
+    assert_eq!(origin(k.status().unwrap()).1, None);
+}

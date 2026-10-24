@@ -123,7 +123,7 @@ fn back_toggles_between_two_lots() {
     k.clock().advance(600);
     k.switch_to(lot("12406856533")).unwrap();
     k.clock().advance(600);
-    let first = k.back(Source::ClaudeCode).unwrap();
+    let first = k.back(Source::ClaudeCode, None).unwrap();
     assert_eq!(
         first.started.lot.parent_monday_id.as_deref(),
         Some("12406850311")
@@ -133,7 +133,7 @@ fn back_toggles_between_two_lots() {
         Some("12406856533")
     );
     k.clock().advance(600);
-    let second = k.back(Source::ClaudeCode).unwrap();
+    let second = k.back(Source::ClaudeCode, None).unwrap();
     assert_eq!(
         second.started.lot.parent_monday_id.as_deref(),
         Some("12406856533")
@@ -147,7 +147,7 @@ fn back_with_nothing_running_resumes_the_last_lot() {
     k.clock().advance(600);
     k.stop(None).unwrap();
     k.clock().advance(60);
-    let back = k.back(Source::Manual).unwrap();
+    let back = k.back(Source::Manual, None).unwrap();
     assert!(back.stopped.is_none());
     assert_eq!(
         back.started.lot.parent_monday_id.as_deref(),
@@ -158,10 +158,10 @@ fn back_with_nothing_running_resumes_the_last_lot() {
 #[test]
 fn back_without_previous_lot_fails() {
     let (k, _d) = kairos();
-    assert_eq!(code(k.back(Source::Manual)), "no_previous_lot");
+    assert_eq!(code(k.back(Source::Manual, None)), "no_previous_lot");
     k.start(lot("12406850311")).unwrap();
     k.clock().advance(60);
-    assert_eq!(code(k.back(Source::Manual)), "no_previous_lot");
+    assert_eq!(code(k.back(Source::Manual, None)), "no_previous_lot");
 }
 
 #[test]
@@ -214,7 +214,7 @@ fn back_during_a_pause_goes_to_the_lot_before_the_paused_one() {
     k.clock().advance(60);
     // `recent` marque B comme lot courant (en pause) : `back` doit donc aller sur A, pas relancer B.
     assert!(k.recent_lots(8).unwrap()[0].current);
-    let back = k.back(Source::ClaudeCode).unwrap();
+    let back = k.back(Source::ClaudeCode, None).unwrap();
     assert_eq!(
         back.started.lot.parent_monday_id.as_deref(),
         Some("12406850311")

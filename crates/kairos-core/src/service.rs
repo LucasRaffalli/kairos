@@ -456,7 +456,7 @@ impl<C: Clock> Kairos<C> {
 
     /// Revient au lot d'avant : celui de la dernière entrée fermée dont le lot diffère de celui en
     /// cours ; si rien ne tourne, relance le lot de la dernière entrée fermée.
-    pub fn back(&self, source: Source) -> Result<SwitchResult> {
+    pub fn back(&self, source: Source, workdir: Option<String>) -> Result<SwitchResult> {
         let target = self.with_tx(|ctx| {
             // Le lot en pause compte comme le lot courant, comme dans `recent_lots`.
             let running = match open_entry(ctx)? {
@@ -477,6 +477,7 @@ impl<C: Clock> Kairos<C> {
                 name: lot.name,
                 subtask: lot.subtask,
                 source,
+                workdir,
                 ..StartArgs::default()
             })
         })?;

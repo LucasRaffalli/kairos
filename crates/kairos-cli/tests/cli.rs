@@ -504,7 +504,7 @@ fn label_echoes_the_name_as_stored() {
 }
 
 #[test]
-fn start_and_switch_record_the_current_directory() {
+fn start_switch_and_back_record_the_current_directory() {
     let e = Env::new();
     let work = tempfile::tempdir().unwrap();
     let work = work.path().canonicalize().unwrap();
@@ -519,4 +519,9 @@ fn start_and_switch_record_the_current_directory() {
     ok(e.run_in(&other, T9 + 600, &["switch", "--parent", "222"]));
     let status = json(&ok(e.run_in(&other, T9 + 600, &["--json", "status"])));
     assert_eq!(status["workdir"], other.to_str().unwrap());
+
+    ok(e.run_in(&work, T9 + 1200, &["back"]));
+    let status = json(&ok(e.run_in(&work, T9 + 1200, &["--json", "status"])));
+    assert_eq!(status["lot"]["parent_monday_id"], "111");
+    assert_eq!(status["workdir"], expected);
 }

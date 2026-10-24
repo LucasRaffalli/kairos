@@ -388,7 +388,7 @@ fn dispatch<C: Clock>(
         }
         "back" => {
             let _: NoParams = parse(args)?;
-            Outcome::Switched(k.back(source)?)
+            Outcome::Switched(k.back(source, None)?)
         }
         "set_label" => {
             let p: SetLabelParams = parse(args)?;
