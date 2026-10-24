@@ -33,17 +33,21 @@ Ajoute `--json` pour une réponse structurée (les erreurs aussi : `{"error":{"c
 
 `kairos mcp` est un serveur MCP en stdio : Claude le lance, lui parle en JSON-RPC, et il s'arrête quand l'entrée se ferme. Il expose 14 outils (`start`, `stop`, `pause`, `resume`, `switch`, `status`, `today`, `report`, `add_entry`, `edit_entry`, `delete_entry`, `close_day`, `mark_declared`, `set_subtask_id`) qui appellent le même service que la ligne de commande. Aucun outil ne touche aux réglages.
 
-**Claude Code** (le chemin est celui du binaire compilé tant que l'app ne l'installe pas dans le PATH) :
+**Installation (Mac Apple Silicon).** Le binaire `kairos` est dans l'app. Avec Homebrew, il arrive dans le PATH en même temps qu'elle :
 
 ```bash
-cargo build && claude mcp add kairos --scope user -- "$PWD/target/debug/kairos" mcp
+brew install --cask lucasraffalli/kairos/kairos
 ```
 
-**Claude Desktop** : ajouter dans `~/Library/Application Support/Claude/claude_desktop_config.json`, puis redémarrer.
+**Claude Code** :
 
-```json
-{ "mcpServers": { "kairos": { "command": "/chemin/vers/kairos", "args": ["mcp"] } } }
+```bash
+claude mcp add kairos --scope user -- kairos mcp
 ```
+
+**Claude Desktop** : télécharger `Kairos_<version>.mcpb` sur `https://release.lucasraffalli.com/kairos/` et double-cliquer. L'extension embarque son propre binaire : elle ne dépend ni de Homebrew ni du PATH. Elle ne se met pas à jour toute seule : pour une nouvelle version, rouvrir le nouveau fichier. À défaut, l'ancienne méthode reste possible (entrée `kairos` sous `mcpServers` dans `~/Library/Application Support/Claude/claude_desktop_config.json`, avec `command` et `args: ["mcp"]`, puis redémarrage).
+
+**Développement** (sans installer l'app) : `cargo build` puis `claude mcp add kairos --scope user -- "$PWD/target/debug/kairos" mcp`. Si l'app est aussi installée à la main (DMG) en plus de Homebrew, `kairos` dans le PATH est celle de Homebrew.
 
 **Autonomie.** Trois outils sont difficiles à défaire : `delete_entry`, `close_day`, `mark_declared`. Avec `claude_autonomy` à `ask` (défaut), Claude doit demander puis rappeler l'outil avec `confirm: true` ; à `auto`, il agit seul. Seule la ligne de commande (ou l'app) change ce réglage :
 
@@ -52,6 +56,10 @@ kairos config claude_autonomy auto
 ```
 
 **À mettre dans le CLAUDE.md** : nouvelle tâche → `switch` avec son ID ; ID inconnu → le demander, ne jamais le deviner ; sous-tâche non précisée → poste principal ; ne jamais arrêter un lot en fin de réponse.
+
+## Construire le binaire embarqué
+
+`npm run build:cli` compile `kairos` pour Apple Silicon, le signe (ad hoc) et le dépose dans `src-tauri/binaries/`, où l'overlay de release (`src-tauri/tauri.release.conf.json`, `externalBin`) l'embarque dans l'app. La CI le fait avant `tauri build` ; `npm run deploy` refuse une release dont l'app ne l'embarque pas, assemble `Kairos_<version>.mcpb` à partir de ce même binaire (`scripts/make-mcpb.sh`) et l'envoie sur R2 avant `latest.json`.
 
 ## Architecture
 
