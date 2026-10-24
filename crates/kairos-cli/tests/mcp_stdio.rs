@@ -469,8 +469,9 @@ fn recent_and_back_over_the_wire() {
     let mut s = Session::open(&db, "claude-code");
     s.tool(
         "start",
-        json!({ "parent": "12406850311", "label": "Bundle" }),
+        json!({ "parent": "12406850311", "label": "Bundle", "at": "08:00" }),
     );
+    // L'horloge est figée : sans heure de départ en arrière, le lot quitté aurait une durée nulle.
     s.tool("switch", json!({ "parent": "12406856533" }));
     let (is_error, recent) = s.tool("recent", json!({}));
     assert!(!is_error);
