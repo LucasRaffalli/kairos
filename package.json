@@ -1,6 +1,6 @@
 {
   "name": "kairos",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Kairos, chronomètre de barre de menus pour Monday : lots par tâche parent et sous-tâche, piloté à la main ou par Claude. Cœur Rust, enveloppe Tauri v2, interface Angular.",
   "scripts": {
     "ng": "ng",

@@ -1917,7 +1917,7 @@ dependencies = [
 
 [[package]]
 name = "kairos-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kairos-core",
  "serde_json",
@@ -1929,7 +1929,7 @@ dependencies = [
 
 [[package]]
 name = "kairos-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "clap",
@@ -1944,7 +1944,7 @@ dependencies = [
 
 [[package]]
 name = "kairos-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "rusqlite",

@@ -1,6 +1,6 @@
 [package]
 name = "kairos-core"
-version = "0.1.0"
+version = "0.2.0"
 description = "Kairos, le cœur : règles métier et base SQLite, partagées par l'app et la ligne de commande"
 edition = "2021"
 authors = ["lucas"]

@@ -1,4 +1,21 @@
 {
+  "0.2.0": {
+    "title": "The timer and Claude",
+    "notes": [
+      {
+        "text": "Kairos can now track your time: start, switch, pause and stop a task, fix the day, then prepare the line to enter in Monday, with rounding. Everything goes through the kairos command; the app screen comes next.",
+        "how": "In a terminal: kairos start --parent 12406850311, then kairos status."
+      },
+      {
+        "text": "Claude can drive Kairos: Claude Code and Claude Desktop start, switch and stop the timer for you. Actions that are hard to undo (deleting an entry, closing the day or marking it entered) ask for your approval, unless you choose to let Claude act on its own.",
+        "how": "Claude Code: claude mcp add kairos --scope user -- kairos mcp. Claude Desktop: open the Kairos_0.2.0.mcpb file. To let Claude act on its own: kairos config claude_autonomy auto."
+      },
+      {
+        "text": "With Homebrew, the kairos command is installed along with the app. If you already installed 0.1.0 with Homebrew, the automatic update did not add the command.",
+        "how": "Once: brew reinstall --cask kairos."
+      }
+    ]
+  },
   "0.1.0": {
     "title": "The foundation",
     "notes": [
