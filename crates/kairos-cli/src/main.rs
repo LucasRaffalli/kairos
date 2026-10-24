@@ -70,6 +70,9 @@ fn run() -> i32 {
     if let Command::Hook { event } = &cli.command {
         return hook::run(*event);
     }
+    if let Command::Hooks { action } = &cli.command {
+        return hook::install::run(action);
+    }
     if matches!(cli.command, Command::Mcp) {
         return mcp::server::run();
     }
@@ -207,7 +210,7 @@ fn execute(k: &Kairos<AppClock>, command: Command) -> Result<(Outcome, Offsets)>
             let value = k.config_get(&key)?;
             Outcome::Config { key, value }
         }
-        Command::Version | Command::Mcp | Command::Hook { .. } => {
+        Command::Version | Command::Mcp | Command::Hook { .. } | Command::Hooks { .. } => {
             return Err(Error::Internal(
                 "`version`, `mcp` et `hook` ne passent pas par le service".into(),
             ))

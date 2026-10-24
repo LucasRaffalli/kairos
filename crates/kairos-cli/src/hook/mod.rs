@@ -7,6 +7,7 @@
 //! IDs, puis jeté.
 
 mod input;
+pub mod install;
 mod output;
 mod rules;
 mod sources;
