@@ -369,3 +369,72 @@ fn a_newer_database_is_db_newer() {
     assert!(is_error);
     assert_eq!(error["error"]["code"], "db_newer");
 }
+
+#[test]
+fn two_servers_on_one_database_only_one_start_wins() {
+    let (_d, db) = temp_db();
+    let mut a = Session::open(&db, "claude-code");
+    let mut b = Session::open(&db, "claude-desktop");
+    let (a_err, _) = a.tool("start", json!({ "parent": "1" }));
+    let (b_err, b_out) = b.tool("start", json!({ "parent": "2" }));
+    assert!(!a_err);
+    assert!(b_err);
+    assert_eq!(b_out["error"]["code"], "already_running");
+    assert_eq!(
+        count(&db, "SELECT COUNT(*) FROM entries WHERE end_at IS NULL"),
+        1
+    );
+}
+
+#[test]
+fn rapid_calls_are_handled_in_order() {
+    let (_d, db) = temp_db();
+    let mut s = Session::open(&db, "claude-code");
+    for (i, parent) in ["1", "2", "3"].iter().enumerate() {
+        let (is_error, out) = s.tool("switch", json!({ "parent": parent }));
+        assert!(!is_error, "switch {i} : {out}");
+    }
+    let (_, status) = s.tool("status", json!({}));
+    assert_eq!(status["state"], "running");
+    // L'horloge est figée : les `switch` à la même seconde ne laissent pas d'entrée de durée nulle.
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM entries"), 1);
+    let (_, stopped) = s.tool("stop", json!({}));
+    assert_eq!(stopped["lot"]["parent_monday_id"], "3");
+}
+
+#[test]
+fn an_invalid_task_name_is_a_business_error() {
+    let (_d, db) = temp_db();
+    let mut s = Session::open(&db, "claude-code");
+    for name in ["a".repeat(500), "deux\nlignes".to_string()] {
+        let (is_error, out) = s.tool("start", json!({ "name": name }));
+        assert!(is_error, "{out}");
+        assert_eq!(out["error"]["code"], "invalid_name");
+    }
+    assert_eq!(s.tool("status", json!({})).1["state"], "idle");
+}
+
+#[test]
+fn delete_of_an_unknown_id_in_ask_mode_is_entry_not_found() {
+    let (_d, db) = temp_db();
+    let mut s = Session::open(&db, "claude-code");
+    let (is_error, out) = s.tool("delete_entry", json!({ "id": 42 }));
+    assert!(is_error);
+    assert_eq!(out["error"]["code"], "entry_not_found");
+}
+
+#[test]
+fn stdin_closed_mid_session_leaves_the_database_consistent() {
+    let (_d, db) = temp_db();
+    let mut s = Session::open(&db, "claude-code");
+    s.tool("start", json!({ "parent": "1" }));
+    s.send_raw(&json!({ "jsonrpc": "2.0", "id": 99, "method": "tools/call", "params": { "name": "stop", "arguments": {} } }).to_string());
+    assert_eq!(s.close_and_wait().code(), Some(0));
+    let open = count(&db, "SELECT COUNT(*) FROM entries WHERE end_at IS NULL");
+    assert!(open <= 1);
+    let check: String = rusqlite::Connection::open(&db)
+        .unwrap()
+        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(check, "ok");
+}

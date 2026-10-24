@@ -29,6 +29,30 @@ kairos config rounding_minutes 15  # arrondi léger (0, 5, 10 ou 15), main_subta
 
 Ajoute `--json` pour une réponse structurée (les erreurs aussi : `{"error":{"code","message"}}`, code de sortie 2). Une entrée ne traverse jamais minuit : un lot encore ouvert à 00:00 est coupé en deux, une entrée par jour.
 
+## Brancher Claude (MCP)
+
+`kairos mcp` est un serveur MCP en stdio : Claude le lance, lui parle en JSON-RPC, et il s'arrête quand l'entrée se ferme. Il expose 14 outils (`start`, `stop`, `pause`, `resume`, `switch`, `status`, `today`, `report`, `add_entry`, `edit_entry`, `delete_entry`, `close_day`, `mark_declared`, `set_subtask_id`) qui appellent le même service que la ligne de commande. Aucun outil ne touche aux réglages.
+
+**Claude Code** (le chemin est celui du binaire compilé tant que l'app ne l'installe pas dans le PATH) :
+
+```bash
+cargo build && claude mcp add kairos --scope user -- "$PWD/target/debug/kairos" mcp
+```
+
+**Claude Desktop** : ajouter dans `~/Library/Application Support/Claude/claude_desktop_config.json`, puis redémarrer.
+
+```json
+{ "mcpServers": { "kairos": { "command": "/chemin/vers/kairos", "args": ["mcp"] } } }
+```
+
+**Autonomie.** Trois outils sont difficiles à défaire : `delete_entry`, `close_day`, `mark_declared`. Avec `claude_autonomy` à `ask` (défaut), Claude doit demander puis rappeler l'outil avec `confirm: true` ; à `auto`, il agit seul. Seule la ligne de commande (ou l'app) change ce réglage :
+
+```bash
+kairos config claude_autonomy auto
+```
+
+**À mettre dans le CLAUDE.md** : nouvelle tâche → `switch` avec son ID ; ID inconnu → le demander, ne jamais le deviner ; sous-tâche non précisée → poste principal ; ne jamais arrêter un lot en fin de réponse.
+
 ## Architecture
 
 | Dossier                 | Rôle                                                                                                                                              |
