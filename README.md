@@ -8,6 +8,27 @@ La conception complète (pourquoi, concept, utilisation, cahier des charges, tec
 
 **État : étape 0 (le socle).** Une icône dans la barre de menus et un popover vide aux couleurs de l'app ; le chronomètre arrive aux étapes suivantes. L'icône de l'app est **provisoire** (un aplat Iris et le glyphe blanc).
 
+## Utiliser en ligne de commande
+
+Depuis l'étape 1a, `kairos` chronomètre une journée entière sans l'app ni Claude. La base est `~/Library/Application Support/com.aegis.kairos/kairos.db` (`KAIROS_DB` la remplace).
+
+```bash
+cargo build -p kairos-cli          # le binaire : target/debug/kairos
+kairos start --parent 12406850311 --subtask Front   # lance un lot (sous-tâche par défaut : le poste principal)
+kairos switch --parent 12406856533 --subtask Recettage   # change de lot, à la même seconde
+kairos pause ; kairos resume
+kairos stop
+kairos add --name "Réunion" --from 13:00 --to 13:30      # un temps oublié
+kairos today                       # les entrées du jour, avec leurs numéros
+kairos edit 3 --to 10:30           # corrige une entrée
+kairos report                      # la ventilation et la ligne à saisir dans Monday
+kairos close-day                   # clôture (--stop arrête d'abord le lot en cours)
+kairos mark-declared               # quand tu as saisi dans Monday
+kairos config rounding_minutes 15  # arrondi léger (0, 5, 10 ou 15), main_subtask Back…
+```
+
+Ajoute `--json` pour une réponse structurée (les erreurs aussi : `{"error":{"code","message"}}`, code de sortie 2). Une entrée ne traverse jamais minuit : un lot encore ouvert à 00:00 est coupé en deux, une entrée par jour.
+
 ## Architecture
 
 | Dossier                 | Rôle                                                                                                                                              |

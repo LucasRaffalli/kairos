@@ -5,3 +5,12 @@ description = "Kairos, le cœur : règles métier et base SQLite, partagées par
 edition = "2021"
 authors = ["lucas"]
 publish = false
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+thiserror = "2"
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
