@@ -33,14 +33,27 @@ Hors 1c :
 
 Les sources, **par ordre de fiabilité**. On prend la première qui donne **un seul** parent ; les suivantes ne sont lues que si la précédente ne donne rien.
 
-1. **Le message** : un lien Monday (`monday.com/…/pulses/<id>` ou `…/items/<id>`), ou un numéro nu de 10 à 11 chiffres sans zéro initial.
-2. **La branche Git** : un numéro de 10 à 11 chiffres dans son nom (`git -C <cwd> rev-parse --abbrev-ref HEAD`).
-3. **Les derniers commits** : `[Monday #<id>]` dans les 10 derniers messages (`git log -n 10`). **Un commit peut citer plusieurs IDs** : dans un même crochet (`[Monday #A, #B, #C]`, `[Monday #A #B]`) ou en plusieurs crochets (`[Monday #A] [Monday #B]`). Tous les nombres de 9 à 12 chiffres d'un crochet qui commence par « Monday » (sans tenir compte de la casse) sont lus.
+1. **Le message** de l'utilisateur.
+2. **La branche Git** (`git -C <cwd> rev-parse --abbrev-ref HEAD`).
+3. **Les derniers commits** : sujet et corps des 10 derniers (`git log -n 10`).
 4. **`.kairos.json`** : cherché en remontant depuis le dossier de travail jusqu'à la racine du dépôt ; `{"parent": "…", "label": "…", "subtask": "…"}`, seul `parent` est obligatoire.
 
 Chaque lecture Git a un délai de 2 secondes ; un échec (pas un dépôt, Git absent, délai) vaut « pas de source », jamais une erreur.
 
-**Une source est sûre** quand elle est explicite : un lien dans le message, `[Monday #id]` dans un commit, `.kairos.json`. Un **numéro nu** (dans le message ou la branche) n'est sûr que si `resolve_monday_id` le reconnaît ; sinon c'est un doute (ça peut être un téléphone, un horodatage, un numéro de commande).
+**Aucun format imposé.** Chacun écrit ses commits, ses branches et ses messages à sa façon (`[Monday #A, #B]`, `Monday: A`, `fix(bundle) A B C`, `closes #A`, un lien, rien d'autre qu'un numéro…). Kairos ne cherche donc **pas un gabarit** : il cherche la **forme d'un ID Monday**, n'importe où dans le texte (sujet, corps, nom de branche, message) :
+
+- un **lien Monday** (`monday.com/…/pulses/<id>` ou `…/items/<id>`) : l'ID est celui du lien ;
+- sinon un **nombre de 9 à 12 chiffres**, sans zéro initial, délimité par autre chose que des chiffres ou des lettres (donc pas un morceau d'un identifiant plus long).
+
+Autant d'IDs que le texte en contient, dans n'importe quel ordre et avec n'importe quel séparateur ; les doublons comptent pour un. Les nombres de moins de 9 ou plus de 12 chiffres (version, date, numéro d'issue GitHub) sont ignorés.
+
+**Un ID est sûr** dans l'un de ces cas :
+
+- il vient d'un **lien Monday** ou de `.kairos.json` ;
+- Kairos le **reconnaît** (`resolve_monday_id` : parent connu, ou sous-tâche mémorisée) ;
+- il porte un **repère** juste devant lui, sur la même ligne et à moins de 12 caractères : le mot « monday » (sans tenir compte de la casse), « ticket », « tâche », « task », « item » ou « pulse », ou un `#`.
+
+Un **numéro nu** sans repère que Kairos ne reconnaît pas n'est pas sûr : c'est un doute (ça peut être un téléphone, un horodatage, un numéro de commande). Un ID sûr que Kairos ne connaissait pas est un **nouveau parent** (le message visible l'indique).
 
 ## Ce que fait `UserPromptSubmit`
 
@@ -57,7 +70,7 @@ Chaque lecture Git a un délai de 2 secondes ; un échec (pas un dépôt, Git ab
 - rien en cours, et la branche ou les commits citent plusieurs parents (voir « Plusieurs tâches sur une même branche ») ;
 - un lot est en cours, mais il n'est pas parmi les parents que citent la branche et les commits ;
 - la branche et les commits pointent vers deux parents différents ;
-- un numéro nu jamais vu.
+- un numéro nu sans repère que Kairos ne reconnaît pas.
 
 Quand le hook **informe**, la ligne ajoutée au contexte de Claude (`additionalContext`) dit : « ID détecté <id> (<source>). Appelle `switch` (ou `start`) si c'est bien ça. » Quand il y a **doute** : « Doute : <ce qui est en conflit>. Demande à l'utilisateur lequel avant d'appeler `start` ou `switch`. Ne devine pas. » Quand le hook **agit seul**, un `systemMessage` visible dit ce qui a changé et comment revenir en arrière (`kairos switch <ancien lot>`) ; si le parent est nouveau pour Kairos, il l'écrit (« nouveau parent »). Aucune ligne n'est ajoutée quand il n'y a rien à dire.
 
@@ -65,12 +78,12 @@ Deux sessions Claude Code en parallèle : le lot suit la dernière qui parle (le
 
 ## Plusieurs tâches sur une même branche
 
-Cas fréquent : une branche, trois tâches, trois IDs Monday dans les commits (`[Monday #A]`, puis `#B`, puis `#C`). La branche et les commits donnent alors un **ensemble** de parents, pas un seul, et c'est normal :
+Cas fréquent : une branche, trois tâches, trois IDs Monday dans les commits, écrits comme chacun en a l'habitude. La branche et les commits donnent alors un **ensemble** de parents, pas un seul, et c'est normal :
 
 - **Un lot est en cours et il est dans l'ensemble** : tout est cohérent, **rien à dire**, même s'il y a trois parents. Ce n'est pas un doute.
 - **Rien en cours** : doute, la question liste les candidats (du commit le plus récent au plus ancien) pour que Claude demande sur laquelle tu travailles.
 - **Un lot est en cours mais n'est pas dans l'ensemble** : doute (« Kairos suit X, la branche concerne A, B, C »).
-- **Tu passes à la tâche suivante** : tu donnes son ID dans le message (source sûre) et le hook bascule. Un commit `[Monday #B]` ne bascule jamais le lot tout seul, puisqu'il ne dit pas ce que tu fais maintenant.
+- **Tu passes à la tâche suivante** : tu donnes son ID dans le message (source sûre) et le hook bascule. Un commit qui cite `B` ne bascule jamais le lot tout seul, puisqu'il ne dit pas ce que tu fais maintenant.
 - **Le rapport du soir** garde une ligne par parent : chaque `switch` coupe l'entrée, donc le temps de A, B et C est bien séparé.
 
 Les commits sont d'ordinaire un par tâche, donc un ID chacun ; il arrive qu'un commit en cite plusieurs (il touche plusieurs tâches). Ses IDs entrent simplement dans l'ensemble, sans ordre entre eux : un commit à trois IDs donne le même ensemble que trois commits. **Kairos ne répartit jamais le temps entre les IDs d'un commit** : il ne sait pas combien de temps chaque tâche a pris. Le lot en cours reste celui que tu as annoncé (ou le doute demande lequel) ; si tu as travaillé sur les trois, tu bascules entre eux, ou tu corriges ensuite avec `add` / `edit`.
@@ -122,7 +135,7 @@ Le scénario type : Lucas est sur la feature Bundle, une urgence arrive, il donn
 7. Dépôt sans commits, tête détachée, dossier hors dépôt : pas de source, pas d'erreur.
 8. `.kairos.json` invalide ou sans `parent` : ignoré, avec une ligne sur la sortie d'erreur.
 9. Un ID de commit qui est la sous-tâche mémorisée d'un parent connu : le lot est ce parent et cette sous-tâche.
-10. Un commit qui cite trois IDs (crochet unique, plusieurs crochets, séparateurs virgule, espace ou `&`) : les trois entrent dans l'ensemble ; un chiffre parasite dans le crochet (un numéro de version, une date) est ignoré s'il n'a pas 9 à 12 chiffres.
+10. Un commit qui cite trois IDs, de n'importe quelle façon (un seul crochet, plusieurs, virgules, espaces, `&`, retours à la ligne, `closes #A #B`, lien) : les trois entrent dans l'ensemble. Des nombres de moins de 9 ou plus de 12 chiffres (version, date, numéro d'issue) sont ignorés. Un nombre collé à des lettres (`abc1234567890xyz`) n'est pas un ID.
 11. Une branche avec trois parents dans les commits : lot en cours dans l'ensemble → silence ; rien en cours → une seule question, pas répétée au message suivant ; lot hors ensemble → doute.
 12. « Retourne sur Bundle » avec deux lots dont le libellé contient « bundle » : `recent` en rend deux, Claude demande lequel.
 13. `back` sans lot précédent, ou quand le lot précédent est déjà le lot en cours : `no_previous_lot`.
@@ -132,10 +145,10 @@ Le scénario type : Lucas est sur la feature Bundle, une urgence arrive, il donn
 
 Les règles de détection se testent sans entrée-sortie ; le reste sur le vrai binaire avec une base temporaire, une heure figée et un faux `HOME` / `CLAUDE_CONFIG_DIR`.
 
-- **Cœur** : extraction des IDs (liens de plusieurs formes, numéros nus, faux positifs), décision pour toute la matrice `auto` / `ask` × situation, `resolve_monday_id` (parent, sous-tâche, inconnu).
+- **Cœur** : extraction des IDs en tableau (liens de plusieurs formes, tous les gabarits de commit ci-dessus, numéros nus avec et sans repère, faux positifs : version, date, numéro d'issue, téléphone, horodatage), décision pour toute la matrice `auto` / `ask` × situation, `resolve_monday_id` (parent, sous-tâche, inconnu).
 - **Hook** : un JSON valide dans chaque situation du tableau ; JSON invalide, vide, énorme, champs en trop ; sortie standard qui ne contient que du JSON ; code de sortie toujours 0 ; base verrouillée ou plus récente.
 - **Plusieurs tâches par branche** : les trois cas de la section ci-dessus ; le doute qui ne revient pas ; `hook-state.json` illisible, absent, impossible à écrire.
-- **Sources** : dépôt Git temporaire (branche avec ID, commits `[Monday #…]`, tête détachée), `.kairos.json` valide et invalide.
+- **Sources** : dépôt Git temporaire (branche avec ID, commits écrits de plusieurs façons, tête détachée), `.kairos.json` valide et invalide.
 - **Installation** : dans un faux `HOME` (création, relance sans doublon, conservation des réglages existants, sauvegarde, refus d'un JSON invalide, désinstallation, `--dry-run` qui n'écrit rien).
 - **Retour** : `recent_lots` (ordre, fenêtre de 7 jours, un seul exemplaire par lot, total du jour, lot en cours marqué) ; `back` (aller-retour, rien en cours, aucun précédent, temps additionné sur le même lot) ; les deux outils et les deux commandes sur le vrai binaire.
 - **Bout en bout** : un vrai échange `UserPromptSubmit` en `auto` qui lance puis bascule un lot réel dans la base temporaire.
