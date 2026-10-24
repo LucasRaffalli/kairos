@@ -437,7 +437,7 @@ fn status_reports_the_running_duration_and_the_total_of_today() {
     k.clock().advance(1800);
     k.pause().unwrap();
     match k.status().unwrap() {
-        Status::Paused { lot, since } => assert_eq!(
+        Status::Paused { lot, since, .. } => assert_eq!(
             (lot.describe().as_str(), since),
             ("Front sur 12406850311", T9 + 1800)
         ),
@@ -452,6 +452,7 @@ fn status_reports_the_running_duration_and_the_total_of_today() {
             since,
             duration,
             today_total,
+            ..
         } => {
             assert_eq!(
                 (lot.describe().as_str(), since, duration, today_total),

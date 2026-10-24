@@ -11,6 +11,7 @@ use crate::error::{Error, Result};
 const MIGRATIONS: &[&str] = &[
     include_str!("migrations/001_init.sql"),
     include_str!("migrations/002_autonomy.sql"),
+    include_str!("migrations/003_entry_origin.sql"),
 ];
 
 /// Le `user_version` de cette version de Kairos.
@@ -112,6 +113,14 @@ impl Db {
 
     pub fn conn(&self) -> &Connection {
         &self.conn
+    }
+
+    /// Le compteur de modifications de SQLite : il change quand **une autre** connexion écrit dans
+    /// la base. L'app le consulte pour savoir si elle doit se rafraîchir.
+    pub fn data_version(&self) -> Result<i64> {
+        Ok(self
+            .conn
+            .query_row("PRAGMA data_version", [], |r| r.get(0))?)
     }
 }
 
@@ -256,6 +265,7 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(version, LATEST_VERSION);
+        assert_eq!(LATEST_VERSION, 3);
     }
 
     #[test]

@@ -76,6 +76,11 @@ fn an_existing_version_1_database_gets_the_default_on_upgrade() {
         let c = rusqlite::Connection::open(&path).unwrap();
         c.execute("DELETE FROM settings WHERE key = 'claude_autonomy'", [])
             .unwrap();
+        // La base de la version 1 n'a pas non plus les colonnes de la migration 3.
+        c.execute_batch(
+            "ALTER TABLE entries DROP COLUMN source; ALTER TABLE entries DROP COLUMN workdir;",
+        )
+        .unwrap();
         c.pragma_update(None, "user_version", 1).unwrap();
     }
     assert_eq!(

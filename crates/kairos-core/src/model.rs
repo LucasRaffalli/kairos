@@ -102,6 +102,10 @@ pub struct Entry {
     pub end: Option<i64>,
     pub removed: bool,
     pub note: Option<String>,
+    /// Qui a lancé l'entrée (vide pour une entrée ajoutée après coup ou d'avant la migration 3).
+    pub source: Option<Source>,
+    /// Le dossier de travail du lancement.
+    pub workdir: Option<String>,
 }
 
 /// Ce qu'il faut pour lancer un lot (aussi pour `switch`).
@@ -120,6 +124,8 @@ pub struct StartArgs {
     /// Heure de début, pour un lancement en retard (vide : maintenant).
     pub at: Option<i64>,
     pub source: Source,
+    /// Dossier de travail du lancement (nettoyé : jamais une erreur, au pire ignoré).
+    pub workdir: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -152,10 +158,14 @@ pub enum Status {
         since: i64,
         duration: i64,
         today_total: i64,
+        launched_by: Option<Source>,
+        workdir: Option<String>,
     },
     Paused {
         lot: LotView,
         since: i64,
+        launched_by: Option<Source>,
+        workdir: Option<String>,
     },
 }
 
@@ -285,6 +295,17 @@ pub enum KnownId {
     },
     /// Jamais vu.
     Unknown,
+}
+
+/// Les sous-tâches proposées pour un parent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SubtaskChoices {
+    /// Le poste principal (réglage `main_subtask`).
+    pub main: String,
+    /// Les sous-tâches de base, communes à tous les parents.
+    pub base: Vec<String>,
+    /// Les sous-tâches propres au parent demandé.
+    pub own: Vec<String>,
 }
 
 /// Un lot récent, avec ce qu'il faut pour le retrouver.

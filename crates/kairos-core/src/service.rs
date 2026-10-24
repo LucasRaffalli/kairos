@@ -8,7 +8,7 @@ use crate::db::Db;
 use crate::error::{Error, Result};
 use crate::model::{
     AddEntry, Day, DayStatus, DayView, EditEntry, Entry, EntryView, KnownId, LotView, RecentLot,
-    Source, StartArgs, StartedLot, Status, StoppedEntry, SwitchResult, Totals,
+    Source, StartArgs, StartedLot, Status, StoppedEntry, SubtaskChoices, SwitchResult, Totals,
 };
 use crate::report::{self, Report, ReportEntry};
 use crate::timeline::{self, Interval};
@@ -16,6 +16,9 @@ use crate::timeline::{self, Interval};
 /// Un lancement ne peut pas remonter à plus de 2 jours : au-delà, une faute de frappe créerait
 /// une entrée par jour (la découpe à minuit), et `kairos add` fait ce travail proprement.
 const MAX_BACKDATE_SECS: i64 = 2 * 86_400;
+
+/// Longueur maximale d'un dossier de travail (au-delà, il est tronqué).
+const MAX_WORKDIR_CHARS: usize = 500;
 
 /// Longueur maximale d'un nom (tâche, sous-tâche, libellé).
 const MAX_NAME_CHARS: usize = 120;
@@ -106,7 +109,13 @@ impl<C: Clock> Kairos<C> {
             let lot_id = paused_lot(ctx)?.ok_or(Error::NothingToResume)?;
             // Si l'horloge a reculé depuis la pause, reprendre chevaucherait l'entrée fermée.
             ensure_free_from(ctx, ctx.now)?;
-            let entry_id = insert_open_entry(ctx, lot_id, ctx.now)?;
+            let origin = last_entry_of(ctx, lot_id)?
+                .map(|e| Origin {
+                    source: e.source,
+                    workdir: e.workdir,
+                })
+                .unwrap_or_default();
+            let entry_id = insert_open_entry(ctx, lot_id, ctx.now, &origin)?;
             clear_pause(ctx)?;
             touch_day(ctx, &timeline::local_date(ctx.now, ctx.offset))?;
             Ok(StartedLot {
@@ -143,22 +152,26 @@ impl<C: Clock> Kairos<C> {
 
     pub fn status(&self) -> Result<Status> {
         self.with_tx(|ctx| {
-            if let Some((_, lot_id, since)) = open_entry(ctx)? {
+            if let Some((entry_id, lot_id, since)) = open_entry(ctx)? {
                 let today = timeline::local_date(ctx.now, ctx.offset);
+                let origin = entry_origin(ctx, entry_id)?;
                 return Ok(Status::Running {
                     lot: lot_view(ctx, lot_id)?,
                     since,
                     duration: (ctx.now - since).max(0),
                     today_total: day_total(ctx, &today)?,
+                    launched_by: origin.source,
+                    workdir: origin.workdir,
                 });
             }
             if let Some(lot_id) = paused_lot(ctx)? {
-                let since = last_entry_of(ctx, lot_id)?
-                    .and_then(|e| e.end)
-                    .unwrap_or(ctx.now);
+                let last = last_entry_of(ctx, lot_id)?;
+                let since = last.as_ref().and_then(|e| e.end).unwrap_or(ctx.now);
                 return Ok(Status::Paused {
                     lot: lot_view(ctx, lot_id)?,
                     since,
+                    launched_by: last.as_ref().and_then(|e| e.source),
+                    workdir: last.and_then(|e| e.workdir),
                 });
             }
             Ok(Status::Idle)
@@ -378,6 +391,35 @@ impl<C: Clock> Kairos<C> {
                     label,
                 },
                 None => KnownId::Unknown,
+            })
+        })
+    }
+
+    /// Les sous-tâches à proposer pour un parent : le poste principal, les sous-tâches de base et
+    /// celles propres à ce parent (aucune si on ne le connaît pas). Lecture seule.
+    pub fn subtask_choices(&self, parent_monday_id: Option<&str>) -> Result<SubtaskChoices> {
+        self.with_tx(|ctx| {
+            let parent = clean_monday_id(&parent_monday_id.map(str::to_string))?;
+            let main = ctx.tx.query_row(
+                "SELECT value FROM settings WHERE key = 'main_subtask'",
+                [],
+                |r| r.get(0),
+            )?;
+            let names = |sql: &str, params: &[&dyn rusqlite::ToSql]| -> Result<Vec<String>> {
+                let mut stmt = ctx.tx.prepare(sql)?;
+                let rows = stmt.query_map(params, |r| r.get(0))?;
+                Ok(rows.collect::<rusqlite::Result<_>>()?)
+            };
+            Ok(SubtaskChoices {
+                main,
+                base: names(
+                    "SELECT name FROM subtasks WHERE parent_id IS NULL AND is_base = 1 ORDER BY id",
+                    &[],
+                )?,
+                own: names(
+                    "SELECT s.name FROM subtasks s JOIN parents p ON p.id = s.parent_id WHERE p.monday_id = ?1 ORDER BY s.id",
+                    &[&parent],
+                )?,
             })
         })
     }
@@ -762,7 +804,7 @@ fn open_entry(ctx: &Ctx) -> Result<Option<(i64, i64, i64)>> {
 fn entry_by_id(ctx: &Ctx, id: i64) -> Result<Entry> {
     ctx.tx
         .query_row(
-            "SELECT id, lot_id, start_at, end_at, removed, note FROM entries WHERE id = ?1",
+            "SELECT id, lot_id, start_at, end_at, removed, note, source, workdir FROM entries WHERE id = ?1",
             [id],
             row_to_entry,
         )
@@ -778,17 +820,52 @@ fn row_to_entry(r: &rusqlite::Row) -> rusqlite::Result<Entry> {
         end: r.get(3)?,
         removed: r.get::<_, i64>(4)? != 0,
         note: r.get(5)?,
+        source: r
+            .get::<_, Option<String>>(6)?
+            .as_deref()
+            .and_then(Source::parse),
+        workdir: r.get(7)?,
     })
 }
 
 fn last_entry_of(ctx: &Ctx, lot_id: i64) -> Result<Option<Entry>> {
-    Ok(ctx.tx.query_row("SELECT id, lot_id, start_at, end_at, removed, note FROM entries WHERE lot_id = ?1 ORDER BY start_at DESC LIMIT 1", [lot_id], row_to_entry).optional()?)
+    Ok(ctx.tx.query_row("SELECT id, lot_id, start_at, end_at, removed, note, source, workdir FROM entries WHERE lot_id = ?1 ORDER BY start_at DESC LIMIT 1", [lot_id], row_to_entry).optional()?)
 }
 
-fn insert_open_entry(ctx: &Ctx, lot_id: i64, at: i64) -> Result<i64> {
+/// Qui a lancé une entrée, et d'où.
+#[derive(Default)]
+struct Origin {
+    source: Option<Source>,
+    workdir: Option<String>,
+}
+
+fn entry_origin(ctx: &Ctx, id: i64) -> Result<Origin> {
+    let entry = entry_by_id(ctx, id)?;
+    Ok(Origin {
+        source: entry.source,
+        workdir: entry.workdir,
+    })
+}
+
+/// Un dossier de travail propre : rogné, sans caractère de contrôle (sinon ignoré), 500
+/// caractères au plus. Ce n'est qu'une information d'affichage : jamais une erreur.
+fn clean_workdir(raw: &Option<String>) -> Option<String> {
+    let text = raw.as_deref()?.trim();
+    if text.is_empty() || text.chars().any(char::is_control) {
+        return None;
+    }
+    Some(text.chars().take(MAX_WORKDIR_CHARS).collect())
+}
+
+fn insert_open_entry(ctx: &Ctx, lot_id: i64, at: i64, origin: &Origin) -> Result<i64> {
     ctx.tx.execute(
-        "INSERT INTO entries (lot_id, start_at) VALUES (?1, ?2)",
-        params![lot_id, at],
+        "INSERT INTO entries (lot_id, start_at, source, workdir) VALUES (?1, ?2, ?3, ?4)",
+        params![
+            lot_id,
+            at,
+            origin.source.map(Source::as_str),
+            origin.workdir
+        ],
     )?;
     Ok(ctx.tx.last_insert_rowid())
 }
@@ -816,17 +893,30 @@ fn reconcile(ctx: &Ctx) -> Result<()> {
     let Some(&first) = midnights.first() else {
         return Ok(());
     };
+    // Chaque morceau garde l'origine de l'entrée qu'on coupe.
+    let origin = entry_origin(ctx, id)?;
     ctx.tx.execute(
         "UPDATE entries SET end_at = ?1 WHERE id = ?2",
         params![first, id],
     )?;
     for pair in midnights.windows(2) {
         ctx.tx.execute(
-            "INSERT INTO entries (lot_id, start_at, end_at) VALUES (?1, ?2, ?3)",
-            params![lot_id, pair[0], pair[1]],
+            "INSERT INTO entries (lot_id, start_at, end_at, source, workdir) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                lot_id,
+                pair[0],
+                pair[1],
+                origin.source.map(Source::as_str),
+                origin.workdir
+            ],
         )?;
     }
-    insert_open_entry(ctx, lot_id, *midnights.last().expect("liste non vide"))?;
+    insert_open_entry(
+        ctx,
+        lot_id,
+        *midnights.last().expect("liste non vide"),
+        &origin,
+    )?;
     Ok(())
 }
 
@@ -875,7 +965,11 @@ fn start_in(ctx: &Ctx, args: &StartArgs) -> Result<StartedLot> {
     }
     ensure_free_from(ctx, at)?;
     let lot_id = ensure_lot(ctx, &reference, args.source)?;
-    let entry_id = insert_open_entry(ctx, lot_id, at)?;
+    let origin = Origin {
+        source: Some(args.source),
+        workdir: clean_workdir(&args.workdir),
+    };
+    let entry_id = insert_open_entry(ctx, lot_id, at, &origin)?;
     clear_pause(ctx)?;
     touch_day(ctx, &timeline::local_date(at, ctx.offset))?;
     // Un lancement en retard peut traverser un minuit : on coupe tout de suite.
@@ -926,6 +1020,8 @@ fn close_open(ctx: &Ctx, at: Option<i64>) -> Result<StoppedEntry> {
                 end: Some(start),
                 removed: false,
                 note: None,
+                source: None,
+                workdir: None,
             },
             duration: 0,
         });
@@ -1129,7 +1225,7 @@ fn check_range(ctx: &Ctx, from: i64, to: i64, except: Option<i64>) -> Result<()>
 /// Les entrées d'un jour local (une entrée ne traverse jamais minuit : son début suffit à la placer).
 fn day_entries(ctx: &Ctx, date: &str) -> Result<Vec<(Entry, LotView)>> {
     let bounds = timeline::day_bounds(date, ctx.offset)?;
-    let mut stmt = ctx.tx.prepare("SELECT id, lot_id, start_at, end_at, removed, note FROM entries WHERE start_at >= ?1 AND start_at < ?2 ORDER BY start_at, id")?;
+    let mut stmt = ctx.tx.prepare("SELECT id, lot_id, start_at, end_at, removed, note, source, workdir FROM entries WHERE start_at >= ?1 AND start_at < ?2 ORDER BY start_at, id")?;
     let entries = stmt
         .query_map([bounds.start, bounds.end], row_to_entry)?
         .collect::<std::result::Result<Vec<_>, _>>()?;

@@ -326,6 +326,7 @@ fn dispatch<C: Clock>(
                 subtask: p.subtask,
                 subtask_monday_id: p.subtask_id,
                 source,
+                workdir: None,
             };
             if name == "start" {
                 Outcome::Started(k.start(start)?)

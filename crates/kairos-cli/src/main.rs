@@ -128,6 +128,7 @@ fn execute(k: &Kairos<AppClock>, command: Command) -> Result<(Outcome, Offsets)>
             subtask: a.subtask,
             subtask_monday_id: a.subtask_id,
             source: a.source.into(),
+            workdir: None,
         })
     };
 
