@@ -1,0 +1,36 @@
+:host {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 26px;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  font-weight: 400;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.step {
+  color: var(--color-accent-text);
+}
+
+.rule {
+  flex: 1;
+  height: 1px;
+  background: var(--color-bg-raised);
+}
+
+.hint {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-2xs);
+  white-space: nowrap;
+}

@@ -1,0 +1,43 @@
+:host {
+  display: inline-flex;
+  max-width: 100%;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2xs);
+  max-width: 100%;
+  padding: var(--space-2xs) var(--space-xs);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+
+  &:hover {
+    border-color: var(--color-border-strong);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-accent-text);
+    outline-offset: 2px;
+  }
+}
+
+.id {
+  flex: none;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.name {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
