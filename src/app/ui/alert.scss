@@ -13,19 +13,22 @@
   color: var(--color-text-primary);
   font-size: var(--font-size-xs);
 
+  // `--tone` : le contour et la teinte du fond ; `--tone-text` : le glyphe, qui doit être lisible (≥ 4,5:1) sur ce fond.
   &.error {
     --tone: var(--color-status-danger);
+    --tone-text: var(--color-text-danger);
   }
 
   &.info {
     --tone: var(--color-accent-text);
+    --tone-text: var(--color-accent-text);
   }
 }
 
 .glyph {
   align-self: flex-start;
   margin-top: 1px;
-  color: var(--tone);
+  color: var(--tone-text);
   font-size: var(--font-size-md);
 }
 

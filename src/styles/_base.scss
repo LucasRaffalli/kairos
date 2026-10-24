@@ -26,6 +26,20 @@
   --transition-base: 220ms ease;
 }
 
+// Le texte et les glyphes d'erreur. Le rouge `status-danger` n'atteint pas 4,5:1 sur le clair (environ 2,4:1) :
+// ce thème prend le rouge plein `status-danger-fill`, les deux autres gardent `status-danger`.
+[data-theme='dark'] {
+  --color-text-danger: var(--color-status-danger);
+}
+
+[data-theme='contrast'] {
+  --color-text-danger: var(--color-status-danger);
+}
+
+[data-theme='light'] {
+  --color-text-danger: var(--color-status-danger-fill);
+}
+
 * {
   box-sizing: border-box;
 }

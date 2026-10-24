@@ -67,6 +67,108 @@ for (const [name, { needs }] of Object.entries(COMPONENTS)) {
   }
 }
 
+// --- Contrastes et cascade (ronde de correction 1) --------------------------------------------
+// Les valeurs viennent de _tokens.scss, par thème et par accent ; les pourcentages, du .scss lui-même.
+const tokensCss = read(path.join(REPO, 'src', 'styles', '_tokens.scss')) ?? '';
+const baseCss = read(path.join(REPO, 'src', 'styles', '_base.scss')) ?? '';
+const palettes = {};
+for (const m of tokensCss.matchAll(/\[data-theme='(\w+)'\]\[data-accent='(\w+)'\][^{]*\{([^}]*)\}/g)) {
+  const t = {};
+  for (const v of m[3].matchAll(/--color-([\w-]+):\s*(#[0-9a-f]{6})/g)) t[v[1]] = v[2];
+  palettes[`${m[1]}/${m[2]}`] = t;
+}
+const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, pct) => a.map((x, i) => (x * pct) / 100 + (b[i] * (100 - pct)) / 100);
+const luminance = (c) => {
+  const [r, g, b] = c.map((x) => {
+    const v = x / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const ratio = (a, b) => {
+  const [x, y] = [luminance(a), luminance(b)];
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+};
+const AA = 4.5;
+const worst = (fn) => Math.min(...Object.entries(palettes).map(([key, p]) => fn(p, key.split('/')[0])));
+check('les palettes de _tokens.scss sont lues', Object.keys(palettes).length === 15);
+const src = (name, ext) => (read(path.join(UI, `${name}.${ext}`)) ?? '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+// Puce sélectionnée : teinte légère de l'accent sur la surface, contour d'accent, texte principal.
+{
+  const chip = src('chip', 'scss');
+  const pressed = chip.indexOf(`&[aria-pressed='true']`);
+  const dashed = chip.indexOf('&.dashed');
+  const block = pressed >= 0 ? chip.slice(pressed, chip.indexOf('}', pressed)) : '';
+  const tint = block.match(/background:\s*color-mix\(in srgb,\s*var\(--color-accent-text\)\s*(\d+)%,\s*var\(--color-bg-surface\)\)/);
+  check('chip : fond sélectionné = teinte de l’accent sur la surface', tint !== null);
+  check('chip : teinte entre 12 et 24 %', tint !== null && +tint[1] >= 12 && +tint[1] <= 24);
+  check('chip : texte sélectionné en --color-text-primary', /color:\s*var\(--color-text-primary\)/.test(block));
+  check('chip : contour sélectionné en --color-accent-text', /border-color:\s*var\(--color-accent-text\)/.test(block));
+  if (tint !== null) {
+    const w = worst((p) => ratio(rgb(p['text-primary']), mix(rgb(p['accent-text']), rgb(p['bg-surface']), +tint[1])));
+    check(`chip : texte sélectionné ≥ ${AA}:1 (pire cas ${w.toFixed(2)})`, w >= AA);
+  }
+  // « + Autre » sélectionnée garde le style sélectionné : la règle sélectionnée vient APRÈS .dashed (même spécificité).
+  check('chip : le style sélectionné l’emporte sur .dashed (ordre)', dashed >= 0 && pressed > dashed);
+  check('chip : sélectionnée repasse le contour en plein', /border-style:\s*solid/.test(block));
+}
+
+// Texte d'erreur : un token par thème, ≥ 4,5:1 sur la surface du champ et sur le fond de l'alerte.
+{
+  const defined = {};
+  for (const m of baseCss.matchAll(/\[data-theme='(\w+)'\]\s*\{([^}]*)\}/g)) {
+    const v = m[2].match(/--color-text-danger:\s*var\(--color-([\w-]+)\)/);
+    if (v) defined[m[1]] = v[1];
+  }
+  check(
+    '_base.scss : --color-text-danger défini pour dark, light et contrast',
+    ['dark', 'light', 'contrast'].every((t) => defined[t]),
+    JSON.stringify(defined),
+  );
+  const text = (p, theme) => rgb(p[defined[theme]] ?? '#ff00ff');
+  check(`texte d’erreur sur la surface ≥ ${AA}:1`, worst((p, th) => ratio(text(p, th), rgb(p['bg-surface']))) >= AA);
+  const alert = src('alert', 'scss');
+  const tint = alert.match(/background:\s*color-mix\(in srgb,\s*var\(--tone\)\s*(\d+)%,\s*var\(--color-bg-popover\)\)/);
+  check('alert : fond teinté lu', tint !== null);
+  if (tint !== null)
+    check(
+      `glyphe d’erreur sur le fond de l’alerte ≥ ${AA}:1`,
+      worst((p, th) => ratio(text(p, th), mix(rgb(p['status-danger']), rgb(p['bg-popover']), +tint[1]))) >= AA,
+    );
+  check('field : le message d’erreur utilise --color-text-danger', /\.error\s*\{[^}]*color:\s*var\(--color-text-danger\)/.test(src('field', 'scss')));
+  check(
+    'alert : le glyphe d’erreur utilise --color-text-danger',
+    /--tone-text:\s*var\(--color-text-danger\)/.test(alert) && /\.glyph\s*\{[^}]*color:\s*var\(--tone-text\)/.test(alert),
+  );
+}
+
+// Champ : désactivable, focalisable par le code, Entrée signalée ; le focus l'emporte sur le survol.
+{
+  const field = src('field', 'ts');
+  check('field : entrée disabled', /readonly disabled = input\(/.test(field) && field.includes('[disabled]="disabled()"'));
+  check('field : méthode publique focus()', /^\s*focus\(\):\s*void/m.test(field) && field.includes('.focus()'));
+  check('field : sortie submitted sur Entrée', /readonly submitted = output</.test(field) && field.includes('(keydown.enter)'));
+  const scss = src('field', 'scss');
+  check('field : le survol ne masque pas le focus', /&:not\(:focus-within\):hover/.test(scss) && !/&:hover\s*\{/.test(scss));
+  check('field : style désactivé', /:disabled/.test(scss));
+}
+
+// Bouton danger : survol par une couleur de token, pas par un filtre ; texte ≥ 4,5:1.
+{
+  const btn = src('button', 'scss');
+  check('button : pas de filter au survol', !/filter\s*:/.test(btn));
+  const hover = btn.match(
+    /\.danger\s*\{[\s\S]*?&:hover:not\(:disabled\)\s*\{\s*background:\s*color-mix\(in srgb,\s*var\(--color-status-danger-fill\)\s*(\d+)%,\s*black\)/,
+  );
+  check('button : survol danger = color-mix du token de fond', hover !== null);
+  if (hover !== null) {
+    const w = worst((p) => ratio(rgb(p['text-on-accent']), mix(rgb(p['status-danger-fill']), [0, 0, 0], +hover[1])));
+    check(`button : texte du danger survolé ≥ ${AA}:1 (pire cas ${w.toFixed(2)})`, w >= AA);
+  }
+}
+
 // Chaque composant du dossier doit être connu de ce contrôle.
 if (fs.existsSync(UI)) {
   for (const file of fs.readdirSync(UI)) {

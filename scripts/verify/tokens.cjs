@@ -34,6 +34,12 @@ const defined = new Map();
 for (const [, , theme, accent, body] of blocks) {
   defined.set(`${theme}/${accent}`, new Set([...body.matchAll(/(--[\w-]+):/g)].map((m) => m[1])));
 }
+// Les couleurs dérivées écrites à la main dans _base.scss, par thème (elles valent pour tous les accents).
+for (const [, theme, body] of read('src/styles/_base.scss').matchAll(/\[data-theme='(\w+)'\]\s*\{([^}]*)\}/g)) {
+  for (const [key, vars] of defined) {
+    if (key.startsWith(`${theme}/`)) for (const [, name] of body.matchAll(/(--color-[\w-]+):/g)) vars.add(name);
+  }
+}
 for (const t of themes) {
   for (const a of accents) {
     check(`bloc ${t} × ${a} présent`, defined.has(`${t}/${a}`));

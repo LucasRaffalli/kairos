@@ -29,16 +29,18 @@
     outline-offset: 2px;
   }
 
-  // Sélectionnée : le fond plein et le contour d'accent, en plus du `aria-pressed`.
-  &[aria-pressed='true'] {
-    border-color: var(--color-accent-text);
-    background: var(--color-accent-fill);
-    color: var(--color-text-on-accent);
-  }
-
   &.dashed {
     border-style: dashed;
     background: transparent;
+  }
+
+  // Sélectionnée : une teinte légère de l'accent, le contour d'accent et le texte principal, en plus du `aria-pressed`.
+  // Elle vient APRÈS `.dashed` (même spécificité) pour que « + Autre » sélectionnée reste lisible, au contour plein.
+  &[aria-pressed='true'] {
+    border-style: solid;
+    border-color: var(--color-accent-text);
+    background: color-mix(in srgb, var(--color-accent-text) 16%, var(--color-bg-surface));
+    color: var(--color-text-primary);
   }
 }
 

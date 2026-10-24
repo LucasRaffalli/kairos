@@ -57,7 +57,7 @@
   color: var(--color-text-on-accent);
 
   &:hover:not(:disabled) {
-    filter: brightness(1.15);
+    background: color-mix(in srgb, var(--color-status-danger-fill) 85%, black);
   }
 }
 
