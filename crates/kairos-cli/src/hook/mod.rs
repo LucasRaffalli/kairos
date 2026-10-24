@@ -265,7 +265,7 @@ fn act<C: Clock>(k: &Kairos<C>, input: &input::HookInput, plan: &Plan) -> Reply 
                 named(&stopped.lot)
             )
         }
-        None => format!("Kairos : lot lancé sur {now}{new_parent}."),
+        None => format!("Kairos : lot lancé : {now}{new_parent}."),
     };
     let mut context = message.clone();
     let hint_key = format!("label:{}", plan.parent);

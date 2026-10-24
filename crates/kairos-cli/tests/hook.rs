@@ -489,3 +489,44 @@ fn the_text_of_the_prompt_is_never_written() {
         }
     }
 }
+
+#[test]
+fn urgent_interruption_and_return() {
+    let e = Env::new();
+    e.autonomy("auto");
+    // 1. On travaille sur la feature Bundle.
+    e.prompt_at(
+        NOW,
+        "s1",
+        None,
+        &format!("on attaque la feature Bundle, ticket {A}"),
+    );
+    assert_eq!(running_parent(&e.status(NOW)).as_deref(), Some(A));
+    // 2. Une urgence arrive : son ID dans le message bascule le lot.
+    let urgent = e.prompt_at(
+        NOW + 1800,
+        "s1",
+        None,
+        &format!("urgence de Manon, ticket {B}"),
+    );
+    assert!(urgent.message().contains("basculé"), "{}", urgent.message());
+    assert_eq!(running_parent(&e.status(NOW + 1800)).as_deref(), Some(B));
+    // 3. « Retourne sur Bundle » : aucun ID, le hook ne fait rien ; c'est Claude qui comprend.
+    let back_talk = e.prompt_at(NOW + 3600, "s1", None, "go, retourne sur Bundle");
+    assert!(back_talk.silent(), "{}", back_talk.stdout);
+    assert_eq!(running_parent(&e.status(NOW + 3600)).as_deref(), Some(B));
+    // 4. Claude retrouve le lot avec `recent`, puis revient avec `back`.
+    let recent = e.cli(NOW + 3600, &["recent"]);
+    assert_eq!(recent[0]["lot"]["parent_monday_id"], B);
+    assert_eq!(recent[1]["lot"]["parent_monday_id"], A);
+    let back = e.cli(NOW + 3600, &["back"]);
+    assert_eq!(back["started"]["lot"]["parent_monday_id"], A);
+    // 5. Chaque parent garde son temps ; Bundle additionne ses deux passages.
+    let recent = e.cli(NOW + 5400, &["recent"]);
+    assert_eq!(recent[0]["lot"]["parent_monday_id"], A);
+    assert_eq!(recent[0]["today_total"], 1800 + 1800);
+    assert_eq!(recent[1]["today_total"], 1800);
+    let report = e.cli(NOW + 5400, &["report"]);
+    let text = report["text"].as_str().unwrap_or_default();
+    assert!(text.contains(A) && text.contains(B), "{report}");
+}
