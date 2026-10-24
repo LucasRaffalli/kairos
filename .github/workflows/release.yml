@@ -57,6 +57,11 @@ jobs:
 
       - run: npm ci
 
+      # Le binaire `kairos` (CLI et serveur MCP), signé ad hoc, que l'overlay release
+      # embarque dans l'app (externalBin) : un seul build, réutilisé par le .mcpb.
+      - name: Compiler le binaire kairos
+        run: npm run build:cli
+
       # L'overlay release active createUpdaterArtifacts et les targets app+dmg.
       - name: Build Tauri (app + dmg, signé ad-hoc)
         run: npx tauri build --config src-tauri/tauri.release.conf.json
