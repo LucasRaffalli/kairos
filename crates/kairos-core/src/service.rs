@@ -148,7 +148,7 @@ impl<C: Clock> Kairos<C> {
                 return Ok(Status::Running {
                     lot: lot_view(ctx, lot_id)?,
                     since,
-                    duration: ctx.now - since,
+                    duration: (ctx.now - since).max(0),
                     today_total: day_total(ctx, &today)?,
                 });
             }
@@ -194,8 +194,9 @@ impl<C: Clock> Kairos<C> {
                 .into_iter()
                 .filter(|(e, _)| !e.removed)
                 .map(|(e, lot)| ReportEntry {
+                    id: e.id,
                     start: e.start,
-                    end: e.end.unwrap_or(ctx.now),
+                    end: e.end.unwrap_or(ctx.now).max(e.start),
                     parent_monday_id: lot.parent_monday_id,
                     subtask: lot.subtask,
                     name: lot.name,
@@ -992,7 +993,7 @@ fn day_entries(ctx: &Ctx, date: &str) -> Result<Vec<(Entry, LotView)>> {
 fn day_view(ctx: &Ctx, date: &str) -> Result<DayView> {
     let rows = day_entries(ctx, date)?;
     let live: Vec<&Entry> = rows.iter().map(|(e, _)| e).filter(|e| !e.removed).collect();
-    let end_of = |e: &Entry| e.end.unwrap_or(ctx.now);
+    let end_of = |e: &Entry| e.end.unwrap_or(ctx.now).max(e.start);
     let start = live.first().map(|e| e.start);
     let end = live.last().map(|e| end_of(e));
     let pauses = live
@@ -1042,7 +1043,7 @@ fn totals(ctx: &Ctx, date: &str) -> Result<Totals> {
             ),
         };
         *totals.entry(parent).or_default().entry(sub).or_insert(0) +=
-            entry.end.unwrap_or(ctx.now) - entry.start;
+            (entry.end.unwrap_or(ctx.now) - entry.start).max(0);
     }
     Ok(totals)
 }

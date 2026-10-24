@@ -9,6 +9,7 @@ use crate::timeline::format_duration;
 /// Ce qu'il faut savoir d'une entrée pour la ventiler (déjà sans les entrées retirées, dans l'ordre).
 #[derive(Debug, Clone)]
 pub struct ReportEntry {
+    pub id: i64,
     pub start: i64,
     /// Fin de l'entrée ; pour une entrée ouverte, « maintenant ».
     pub end: i64,
@@ -25,11 +26,23 @@ pub struct ParentLine {
     pub total: i64,
 }
 
-/// Un nom de tâche sans ID Monday, durée réelle (non arrondie).
+/// Un chronomètre sans ID Monday : l'entrée, avec ses heures.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct NoIdEntry {
+    pub id: i64,
+    pub start: i64,
+    pub end: i64,
+    pub secs: i64,
+}
+
+/// Un nom de tâche sans ID Monday : sa durée réelle, la durée arrondie qui sera saisie, et chacune
+/// de ses entrées. Dans le texte à saisir, tous les noms se regroupent en une seule ligne « sans ID ».
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct NoIdLine {
     pub name: String,
     pub secs: i64,
+    pub rounded: i64,
+    pub entries: Vec<NoIdEntry>,
 }
 
 /// Une ligne qui a bougé depuis la saisie dans Monday.
@@ -52,7 +65,7 @@ pub struct Report {
     pub total: i64,
     pub lines: Vec<ParentLine>,
     pub no_id: Vec<NoIdLine>,
-    /// Le total « sans ID », arrondi comme une ligne.
+    /// Le total « sans ID » : la somme des durées arrondies de chaque nom.
     pub no_id_total: i64,
     pub rounding_minutes: i64,
     /// La somme des lignes telles qu'elles seront saisies.
@@ -109,12 +122,29 @@ pub fn build(
                     .clone()
                     .or_else(|| entry.subtask.clone())
                     .unwrap_or_else(|| "?".into());
+                let timer = NoIdEntry {
+                    id: entry.id,
+                    start: entry.start,
+                    end: entry.end,
+                    secs,
+                };
                 match no_id.iter_mut().find(|n| n.name == name) {
-                    Some(line) => line.secs += secs,
-                    None => no_id.push(NoIdLine { name, secs }),
+                    Some(line) => {
+                        line.secs += secs;
+                        line.entries.push(timer);
+                    }
+                    None => no_id.push(NoIdLine {
+                        name,
+                        secs,
+                        rounded: 0,
+                        entries: vec![timer],
+                    }),
                 }
             }
         }
+    }
+    for line in &mut no_id {
+        line.rounded = round_to(line.secs, rounding_minutes);
     }
 
     let total: i64 = entries.iter().map(|e| e.end - e.start).sum();
@@ -140,7 +170,7 @@ pub fn build(
             }
         })
         .collect();
-    let no_id_total = round_to(no_id.iter().map(|n| n.secs).sum(), rounding_minutes);
+    let no_id_total = no_id.iter().map(|n| n.rounded).sum();
     let lines_total = lines.iter().map(|l| l.total).sum::<i64>() + no_id_total;
     let gap = match (start, end) {
         (Some(start), Some(end)) => (end - start - pauses) - lines_total,

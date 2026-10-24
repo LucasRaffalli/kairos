@@ -249,3 +249,69 @@ fn an_invalid_date_is_refused() {
         "invalid_date"
     );
 }
+
+#[test]
+fn each_no_id_name_is_rounded_on_its_own_and_the_summary_stays_one_line() {
+    let (k, _d) = kairos();
+    named_entry(&k, "Réunion", at(9, 0), at(9, 10));
+    named_entry(&k, "Mail", at(9, 10), at(9, 20));
+    k.config_set("rounding_minutes", "15").unwrap();
+    let report = k.report(None).unwrap();
+    assert_eq!(
+        report
+            .no_id
+            .iter()
+            .map(|n| (n.name.as_str(), n.secs, n.rounded))
+            .collect::<Vec<_>>(),
+        vec![("Réunion", 600, 900), ("Mail", 600, 900)]
+    );
+    assert_eq!(
+        report.no_id_total, 1800,
+        "la somme des lignes arrondies, pas l'arrondi de la somme"
+    );
+    assert_eq!(
+        report.text, "sans ID : 0 h 30",
+        "dans le résumé du parent : une seule ligne"
+    );
+    assert_eq!((report.lines_total, report.total), (1800, 1200));
+}
+
+#[test]
+fn every_no_id_timer_stays_visible_with_its_own_times() {
+    let (k, _d) = kairos();
+    let first = k
+        .add_entry(AddEntry {
+            name: Some("Réunion".into()),
+            from: at(9, 0),
+            to: at(9, 30),
+            ..AddEntry::default()
+        })
+        .unwrap()
+        .id;
+    named_entry(&k, "Mail", at(9, 30), at(9, 45));
+    let second = k
+        .add_entry(AddEntry {
+            name: Some("Réunion".into()),
+            from: at(10, 0),
+            to: at(10, 15),
+            ..AddEntry::default()
+        })
+        .unwrap()
+        .id;
+    let report = k.report(None).unwrap();
+    let reunion = &report.no_id[0];
+    assert_eq!((reunion.name.as_str(), reunion.secs), ("Réunion", 2700));
+    let timers: Vec<_> = reunion
+        .entries
+        .iter()
+        .map(|e| (e.id, e.start, e.end, e.secs))
+        .collect();
+    assert_eq!(
+        timers,
+        vec![
+            (first, at(9, 0), at(9, 30), 1800),
+            (second, at(10, 0), at(10, 15), 900)
+        ]
+    );
+    assert_eq!(report.no_id[1].entries.len(), 1);
+}

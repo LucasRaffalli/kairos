@@ -394,3 +394,23 @@ fn an_unusable_database_path_is_an_error_not_a_panic() {
     assert_eq!(o.status.code(), Some(2));
     assert!(!err(&o).contains("panicked"), "{}", err(&o));
 }
+
+#[test]
+fn the_report_lists_every_no_id_timer_under_its_name() {
+    let e = Env::new();
+    let now = T9 + 8 * 3600;
+    day_of_entries(&e, now);
+    ok(e.run_at(
+        now,
+        &[
+            "add", "--name", "Réunion", "--from", "14:00", "--to", "14:15",
+        ],
+    ));
+    let text = out(&ok(e.run_at(now, &["report"])));
+    assert!(text.contains("sans ID"), "{text}");
+    assert!(text.contains("Réunion  0 h 45"), "{text}");
+    assert!(text.contains("#3  13 h 00 → 13 h 30  0 h 30"), "{text}");
+    assert!(text.contains("#4  14 h 00 → 14 h 15  0 h 15"), "{text}");
+    let json = json(&ok(e.run_at(now, &["report", "--json"])));
+    assert_eq!(json["no_id"][0]["entries"].as_array().unwrap().len(), 2);
+}

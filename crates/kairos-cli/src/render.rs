@@ -180,12 +180,28 @@ fn report_text(r: &Report, offset: &dyn Fn(i64) -> i32) -> String {
         out.push_str(&format!("  {}  {}\n", line.monday_id, subs.join(" · ")));
     }
     if !r.no_id.is_empty() {
-        let names: Vec<String> = r
-            .no_id
-            .iter()
-            .map(|n| format!("{} {}", n.name, format_duration(n.secs)))
-            .collect();
-        out.push_str(&format!("  sans ID  {}\n", names.join(" · ")));
+        out.push_str("  sans ID\n");
+        for line in &r.no_id {
+            let entered = if line.rounded == line.secs {
+                String::new()
+            } else {
+                format!(" (saisi {})", format_duration(line.rounded))
+            };
+            out.push_str(&format!(
+                "    {}  {}{entered}\n",
+                line.name,
+                format_duration(line.secs)
+            ));
+            for e in &line.entries {
+                out.push_str(&format!(
+                    "      #{}  {} → {}  {}\n",
+                    e.id,
+                    hm(e.start, offset),
+                    hm(e.end, offset),
+                    format_duration(e.secs)
+                ));
+            }
+        }
     }
     if r.rounding_minutes > 0 || r.gap != 0 {
         let sign = if r.gap < 0 { "−" } else { "" };

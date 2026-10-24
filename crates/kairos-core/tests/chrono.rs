@@ -581,3 +581,27 @@ fn stopping_inside_a_chain_of_three_days_drops_the_later_pieces() {
         ]
     );
 }
+
+#[test]
+fn durations_are_never_negative_when_the_clock_goes_back() {
+    let (k, _d) = kairos();
+    k.start(front("12406850311")).unwrap();
+    k.clock().set_now(T9 - 3600);
+    match k.status().unwrap() {
+        Status::Running {
+            duration,
+            today_total,
+            ..
+        } => assert_eq!((duration, today_total), (0, 0)),
+        other => panic!("attendu Running, reçu {other:?}"),
+    }
+    let day = k.today(None).unwrap();
+    assert_eq!((day.total, day.pauses), (0, 0));
+    assert!(
+        day.end.unwrap() >= day.start.unwrap(),
+        "la fin d'une journée ne passe jamais sous son début"
+    );
+    let report = k.report(None).unwrap();
+    assert_eq!((report.total, report.lines_total, report.pauses), (0, 0, 0));
+    assert!(report.end.unwrap() >= report.start.unwrap());
+}
