@@ -393,10 +393,12 @@ fn dispatch<C: Clock>(
                 if day.status == DayStatus::Open {
                     return Err(Error::DayNotClosed(day.date).into());
                 }
-                return Ok(needs_confirmation(
-                    name,
-                    format!("marquer la journée {} saisie dans Monday", day.date),
-                ));
+                if day.status != DayStatus::Declared {
+                    return Ok(needs_confirmation(
+                        name,
+                        format!("marquer la journée {} saisie dans Monday", day.date),
+                    ));
+                }
             }
             Outcome::Declared(k.mark_declared(p.date.as_deref())?)
         }
@@ -809,6 +811,11 @@ mod tests {
             )
         );
         assert_eq!(success(&k, "today", json!({}))["status"], "closed");
+        // Journée déjà saisie : rien à confirmer, le cœur ne fait rien (idempotent).
+        success(&k, "mark_declared", json!({"confirm": true}));
+        let again = success(&k, "mark_declared", json!({}));
+        assert_eq!(again["needs_confirmation"], Value::Null, "{again}");
+        assert_eq!(again["status"], "declared");
     }
 
     #[test]

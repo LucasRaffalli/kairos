@@ -6,8 +6,8 @@ use std::sync::Arc;
 use kairos_core::db::Db;
 use kairos_core::service::Kairos;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, ListToolsResult,
-    PaginatedRequestParams, ServerCapabilities, ServerConfig, Tool,
+    CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Implementation,
+    ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerConfig, Tool,
 };
 use rmcp::service::RequestContext;
 use rmcp::{ErrorData as McpError, RoleServer, ServerHandler, ServiceExt};
@@ -16,11 +16,16 @@ use serde_json::{json, Value};
 use super::tools::{self, ProtocolError, ToolResult};
 use crate::app_clock;
 
-struct KairosServer;
+/// `order` fait attendre les appels les uns derrière les autres, dans l'ordre d'arrivée :
+/// Claude en envoie souvent plusieurs d'un coup, et `start` doit passer avant son `stop`.
+struct KairosServer {
+    order: tokio::sync::Mutex<()>,
+}
 
 impl ServerHandler for KairosServer {
     fn get_info(&self) -> ServerConfig {
         let mut info = ServerConfig::new(ServerCapabilities::builder().enable_tools().build());
+        info.server_info = Implementation::new("kairos", kairos_core::version());
         info.instructions = Some(
             "Kairos suit le temps passé sur les tâches Monday. Lance, change et arrête le \
              chronomètre ; ne devine jamais un ID Monday, demande-le."
@@ -52,6 +57,10 @@ impl ServerHandler for KairosServer {
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
+        let _turn = self.order.lock().await;
+        if context.ct.is_cancelled() {
+            return Err(McpError::internal_error("requête annulée", None));
+        }
         let client = context.client_info().map(|i| i.name);
         let source = tools::client_source(client.as_deref());
         let name = request.name.to_string();
@@ -90,7 +99,7 @@ impl ServerHandler for KairosServer {
 /// Sert jusqu'à la fermeture de l'entrée. Code de sortie : 0 en fin normale, 1 si le transport
 /// ne démarre pas.
 pub fn run() -> i32 {
-    let runtime = match tokio::runtime::Builder::new_multi_thread()
+    let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
     {
@@ -101,7 +110,10 @@ pub fn run() -> i32 {
         }
     };
     runtime.block_on(async {
-        match KairosServer.serve(rmcp::transport::stdio()).await {
+        let server = KairosServer {
+            order: tokio::sync::Mutex::new(()),
+        };
+        match server.serve(rmcp::transport::stdio()).await {
             Ok(service) => {
                 if let Err(e) = service.waiting().await {
                     eprintln!("kairos mcp : {e}");

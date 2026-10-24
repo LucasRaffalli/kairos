@@ -387,19 +387,41 @@ fn two_servers_on_one_database_only_one_start_wins() {
 }
 
 #[test]
-fn rapid_calls_are_handled_in_order() {
-    let (_d, db) = temp_db();
-    let mut s = Session::open(&db, "claude-code");
-    for (i, parent) in ["1", "2", "3"].iter().enumerate() {
-        let (is_error, out) = s.tool("switch", json!({ "parent": parent }));
-        assert!(!is_error, "switch {i} : {out}");
+fn a_burst_of_calls_is_handled_in_the_order_received() {
+    for round in 0..15 {
+        let (_d, db) = temp_db();
+        let mut s = Session::open(&db, "claude-code");
+        let calls = [
+            ("start", json!({ "parent": "1" })),
+            ("stop", json!({})),
+            ("start", json!({ "parent": "2" })),
+            ("stop", json!({})),
+        ];
+        let mut ids = Vec::new();
+        for (name, args) in &calls {
+            s.next_id += 1;
+            ids.push(s.next_id);
+            s.send_raw(&json!({ "jsonrpc": "2.0", "id": s.next_id, "method": "tools/call", "params": { "name": name, "arguments": args } }).to_string());
+        }
+        let mut answers = std::collections::HashMap::new();
+        while answers.len() < ids.len() {
+            let line = s.read_line(Duration::from_secs(10));
+            let value: Value = serde_json::from_str(&line).unwrap();
+            answers.insert(value["id"].as_i64().unwrap(), value);
+        }
+        for id in &ids {
+            assert_ne!(
+                answers[id]["result"]["isError"], true,
+                "tour {round}, appel {id} : {}",
+                answers[id]
+            );
+        }
+        assert_eq!(
+            s.tool("status", json!({})).1["state"],
+            "idle",
+            "tour {round}"
+        );
     }
-    let (_, status) = s.tool("status", json!({}));
-    assert_eq!(status["state"], "running");
-    // L'horloge est figée : les `switch` à la même seconde ne laissent pas d'entrée de durée nulle.
-    assert_eq!(count(&db, "SELECT COUNT(*) FROM entries"), 1);
-    let (_, stopped) = s.tool("stop", json!({}));
-    assert_eq!(stopped["lot"]["parent_monday_id"], "3");
 }
 
 #[test]
@@ -430,8 +452,10 @@ fn stdin_closed_mid_session_leaves_the_database_consistent() {
     s.tool("start", json!({ "parent": "1" }));
     s.send_raw(&json!({ "jsonrpc": "2.0", "id": 99, "method": "tools/call", "params": { "name": "stop", "arguments": {} } }).to_string());
     assert_eq!(s.close_and_wait().code(), Some(0));
+    // Le `stop` en vol a été validé en entier ou pas du tout : jamais d'état à moitié écrit.
     let open = count(&db, "SELECT COUNT(*) FROM entries WHERE end_at IS NULL");
-    assert!(open <= 1);
+    let total = count(&db, "SELECT COUNT(*) FROM entries");
+    assert!([(0, 0), (1, 1)].contains(&(open, total)), "{open}/{total}");
     let check: String = rusqlite::Connection::open(&db)
         .unwrap()
         .query_row("PRAGMA integrity_check", [], |r| r.get(0))
