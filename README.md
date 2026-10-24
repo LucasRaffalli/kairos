@@ -39,15 +39,23 @@ Ajoute `--json` pour une réponse structurée (les erreurs aussi : `{"error":{"c
 brew install --cask lucasraffalli/kairos/kairos
 ```
 
+Déjà installé avant la 0.2.0 ? L'app s'est mise à jour toute seule, mais Homebrew n'a pas posé le lien `kairos` (le cask se met à jour par l'app, donc `brew upgrade` l'ignore). Une fois suffit :
+
+```bash
+brew reinstall --cask kairos
+```
+
+Installé à la main par le DMG ? `brew install --cask --force lucasraffalli/kairos/kairos` remplace l'app et pose le lien.
+
 **Claude Code** :
 
 ```bash
 claude mcp add kairos --scope user -- kairos mcp
 ```
 
-**Claude Desktop** : télécharger `Kairos_<version>.mcpb` sur `https://release.lucasraffalli.com/kairos/` et double-cliquer. L'extension embarque son propre binaire : elle ne dépend ni de Homebrew ni du PATH. Elle ne se met pas à jour toute seule : pour une nouvelle version, rouvrir le nouveau fichier. À défaut, l'ancienne méthode reste possible (entrée `kairos` sous `mcpServers` dans `~/Library/Application Support/Claude/claude_desktop_config.json`, avec `command` et `args: ["mcp"]`, puis redémarrage).
+**Claude Desktop** : télécharger `https://release.lucasraffalli.com/kairos/Kairos_<version>.mcpb` (la version est celle de `latest.json`) et double-cliquer. L'extension embarque son propre binaire : elle ne dépend ni de Homebrew ni du PATH. Elle ne se met pas à jour toute seule : pour une nouvelle version, rouvrir le nouveau fichier. À défaut, l'ancienne méthode reste possible : entrée `kairos` sous `mcpServers` dans `~/Library/Application Support/Claude/claude_desktop_config.json`, avec `args: ["mcp"]` et `command: "/Applications/Kairos.app/Contents/MacOS/kairos"` (chemin absolu : Claude Desktop, lancé depuis le Dock, n'a pas le PATH de Homebrew), puis redémarrage.
 
-**Développement** (sans installer l'app) : `cargo build` puis `claude mcp add kairos --scope user -- "$PWD/target/debug/kairos" mcp`. Si l'app est aussi installée à la main (DMG) en plus de Homebrew, `kairos` dans le PATH est celle de Homebrew.
+**Développement** (sans installer l'app) : `cargo build` puis `claude mcp add kairos --scope user -- "$PWD/target/debug/kairos" mcp`.
 
 **Autonomie.** Trois outils sont difficiles à défaire : `delete_entry`, `close_day`, `mark_declared`. Avec `claude_autonomy` à `ask` (défaut), Claude doit demander puis rappeler l'outil avec `confirm: true` ; à `auto`, il agit seul. Seule la ligne de commande (ou l'app) change ce réglage :
 

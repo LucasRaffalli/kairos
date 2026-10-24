@@ -66,3 +66,10 @@ README : section « Brancher Claude (MCP) » réécrite autour de l'installation
 3. `make-mcpb.sh` + manifeste, essai dans Claude Desktop.
 4. CI, `deploy.sh`, `check-release`.
 5. Documentation, changelog, puis release 0.2.0 (sur ton feu vert).
+
+## Écarts décidés à l'exécution
+
+- `externalBin` seulement dans l'overlay de release (Tauri l'exige dès `cargo check`).
+- Le `.mcpb` est assemblé par `deploy.sh` à partir de l'archive de l'app publiée, et non par `release.yml` : même binaire que le cask.
+- `mcp_config.command` vaut `/bin/sh` et lance `server/start.sh`, qui lève la quarantaine puis lance `kairos mcp` : un binaire ad hoc en quarantaine est tué au lancement (code 137, constaté).
+- Pas de contrôle du changelog sur le MCP dans `check-release.cjs`.

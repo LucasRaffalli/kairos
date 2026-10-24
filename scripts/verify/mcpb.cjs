@@ -71,10 +71,12 @@ const make = (dir, ...args) => sh('bash', [path.join(dir, 'scripts/make-mcpb.sh'
     // puis le lance. Essai sur le paquet défait, avec la quarantaine posée.
     const unpacked = path.join(dir, 'unpacked');
     sh('unzip', ['-q', pkg, '-d', unpacked]);
-    sh('xattr', ['-w', 'com.apple.quarantine', '0081;00000000;Safari;', path.join(unpacked, 'server/kairos')]);
+    // `xattr` n'existe que sur macOS : la CI Linux (ci.yml) lance aussi ce script.
+    const mac = process.platform === 'darwin';
+    if (mac) sh('xattr', ['-w', 'com.apple.quarantine', '0081;00000000;Safari;', path.join(unpacked, 'server/kairos')]);
     const started = sh('/bin/sh', [path.join(unpacked, 'server/start.sh')]);
     check('start.sh lance le binaire', started.stdout.trim() === 'kairos 9.9.9', started.stdout + started.stderr);
-    check('start.sh lève la quarantaine', !sh('xattr', [path.join(unpacked, 'server/kairos')]).stdout.includes('com.apple.quarantine'));
+    if (mac) check('start.sh lève la quarantaine', !sh('xattr', [path.join(unpacked, 'server/kairos')]).stdout.includes('com.apple.quarantine'));
     check('aucun gabarit __VERSION__ ne reste', !JSON.stringify(manifest).includes('__VERSION__'));
     // 2. --check : la bonne version passe, une autre échoue.
     const good = make(dir, '--check', pkg, '9.9.9');
