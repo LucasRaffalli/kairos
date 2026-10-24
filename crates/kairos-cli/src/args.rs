@@ -159,8 +159,20 @@ pub enum Command {
     },
     /// Lit ou écrit un réglage (main_subtask, rounding_minutes, claude_autonomy).
     Config { key: String, value: Option<String> },
+    /// Un hook de Claude Code (lit le JSON de l'événement sur l'entrée standard).
+    Hook {
+        #[arg(value_enum)]
+        event: HookEvent,
+    },
     /// Lance le serveur MCP sur l'entrée et la sortie standard (pour Claude Code et Claude Desktop).
     Mcp,
     /// Affiche la version.
     Version,
+}
+
+/// Les événements de Claude Code que Kairos écoute.
+#[derive(Clone, Copy, clap::ValueEnum)]
+pub enum HookEvent {
+    SessionStart,
+    UserPrompt,
 }

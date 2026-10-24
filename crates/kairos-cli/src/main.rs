@@ -2,6 +2,7 @@
 //! appels de `kairos-core` et rend le résultat en texte ou en JSON.
 
 mod args;
+mod hook;
 mod mcp;
 mod render;
 mod time_input;
@@ -65,6 +66,9 @@ fn run() -> i32 {
     if matches!(cli.command, Command::Version) {
         println!("kairos {}", kairos_core::version());
         return 0;
+    }
+    if let Command::Hook { event } = &cli.command {
+        return hook::run(*event);
     }
     if matches!(cli.command, Command::Mcp) {
         return mcp::server::run();
@@ -203,9 +207,9 @@ fn execute(k: &Kairos<AppClock>, command: Command) -> Result<(Outcome, Offsets)>
             let value = k.config_get(&key)?;
             Outcome::Config { key, value }
         }
-        Command::Version | Command::Mcp => {
+        Command::Version | Command::Mcp | Command::Hook { .. } => {
             return Err(Error::Internal(
-                "`version` et `mcp` ne passent pas par le service".into(),
+                "`version`, `mcp` et `hook` ne passent pas par le service".into(),
             ))
         }
     };
