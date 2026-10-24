@@ -165,14 +165,14 @@ fn count(db: &std::path::Path, sql: &str) -> i64 {
 }
 
 #[test]
-fn lists_the_fourteen_tools_with_descriptions_and_schemas() {
+fn lists_the_seventeen_tools_with_descriptions_and_schemas() {
     let (_d, db) = temp_db();
     let mut s = Session::open(&db, "claude-code");
     let listed = s.request("tools/list", json!({}));
     let tools = listed["result"]["tools"]
         .as_array()
         .unwrap_or_else(|| panic!("{listed}"));
-    assert_eq!(tools.len(), 14);
+    assert_eq!(tools.len(), 17);
     for t in tools {
         assert!(t["name"].as_str().is_some_and(|n| !n.is_empty()), "{t}");
         assert!(
@@ -461,4 +461,26 @@ fn stdin_closed_mid_session_leaves_the_database_consistent() {
         .query_row("PRAGMA integrity_check", [], |r| r.get(0))
         .unwrap();
     assert_eq!(check, "ok");
+}
+
+#[test]
+fn recent_and_back_over_the_wire() {
+    let (_d, db) = temp_db();
+    let mut s = Session::open(&db, "claude-code");
+    s.tool(
+        "start",
+        json!({ "parent": "12406850311", "label": "Bundle" }),
+    );
+    s.tool("switch", json!({ "parent": "12406856533" }));
+    let (is_error, recent) = s.tool("recent", json!({}));
+    assert!(!is_error);
+    assert_eq!(recent[0]["lot"]["parent_monday_id"], "12406856533");
+    let (is_error, back) = s.tool("back", json!({}));
+    assert!(!is_error, "{back}");
+    assert_eq!(back["started"]["lot"]["parent_monday_id"], "12406850311");
+    let (_, labelled) = s.tool(
+        "set_label",
+        json!({ "parent": "12406850311", "label": "Bundle v2" }),
+    );
+    assert_eq!(labelled["saved"], true);
 }

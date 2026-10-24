@@ -143,6 +143,20 @@ pub enum Command {
         #[arg(long)]
         id: String,
     },
+    /// Les lots récents (7 jours), du plus récent au plus ancien.
+    Recent {
+        #[arg(long, default_value_t = 8)]
+        limit: usize,
+    },
+    /// Revient au lot d'avant (deux fois de suite : aller-retour).
+    Back,
+    /// Donne un nom à une tâche parent connue.
+    Label {
+        /// ID Monday du parent.
+        id: String,
+        /// Le nom à afficher.
+        name: String,
+    },
     /// Lit ou écrit un réglage (main_subtask, rounding_minutes, claude_autonomy).
     Config { key: String, value: Option<String> },
     /// Lance le serveur MCP sur l'entrée et la sortie standard (pour Claude Code et Claude Desktop).

@@ -414,3 +414,57 @@ fn the_report_lists_every_no_id_timer_under_its_name() {
     let json = json(&ok(e.run_at(now, &["report", "--json"])));
     assert_eq!(json["no_id"][0]["entries"].as_array().unwrap().len(), 2);
 }
+
+#[test]
+fn recent_back_and_label_work_end_to_end() {
+    let e = Env::new();
+    ok(e.run_at(T9, &["start", "--parent", "111", "--label", "Bundle"]));
+    ok(e.run_at(T9 + 600, &["switch", "--parent", "222"]));
+
+    let recent = json(&ok(e.run_at(T9 + 1200, &["--json", "recent"])));
+    let recent = recent.as_array().unwrap();
+    assert_eq!(recent.len(), 2);
+    assert_eq!(recent[0]["lot"]["parent_monday_id"], "222");
+    assert_eq!(recent[0]["current"], true);
+    assert_eq!(recent[1]["lot"]["parent_label"], "Bundle");
+    assert_eq!(recent[1]["today_total"], 600);
+
+    let text = out(&ok(e.run_at(T9 + 1200, &["recent"])));
+    assert!(
+        text.contains("▶") && text.contains("Bundle") && text.contains("222"),
+        "{text}"
+    );
+    assert_eq!(
+        ok(e.run_at(T9 + 1200, &["recent", "--limit", "1"]))
+            .stdout
+            .iter()
+            .filter(|b| **b == b'\n')
+            .count(),
+        1
+    );
+
+    let back = ok(e.run_at(T9 + 1200, &["back"]));
+    assert!(out(&back).contains("111"), "{}", out(&back));
+    let again = json(&ok(e.run_at(T9 + 1800, &["--json", "back"])));
+    assert_eq!(again["started"]["lot"]["parent_monday_id"], "222");
+
+    let label = ok(e.run_at(T9 + 1800, &["label", "111", "Bundle v2"]));
+    assert!(out(&label).contains("Bundle v2"), "{}", out(&label));
+    let recent = json(&ok(e.run_at(T9 + 1800, &["--json", "recent"])));
+    assert!(recent
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r["lot"]["parent_label"] == "Bundle v2"));
+}
+
+#[test]
+fn back_without_previous_lot_and_label_of_unknown_parent_fail_with_their_codes() {
+    let e = Env::new();
+    let back = e.run(&["--json", "back"]);
+    assert_eq!(back.status.code(), Some(2));
+    assert_eq!(json(&back)["error"]["code"], "no_previous_lot");
+    let label = e.run(&["--json", "label", "999", "Nom"]);
+    assert_eq!(label.status.code(), Some(2));
+    assert_eq!(json(&label)["error"]["code"], "parent_not_found");
+}

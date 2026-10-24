@@ -11,7 +11,7 @@ use clap::Parser;
 use kairos_core::clock::{Clock, FakeClock, SystemClock};
 use kairos_core::db::Db;
 use kairos_core::error::{Error, Result};
-use kairos_core::model::{AddEntry, EditEntry, StartArgs};
+use kairos_core::model::{AddEntry, EditEntry, Source, StartArgs};
 use kairos_core::service::Kairos;
 use kairos_core::timeline;
 use render::Outcome;
@@ -186,6 +186,15 @@ fn execute(k: &Kairos<AppClock>, command: Command) -> Result<(Outcome, Offsets)>
         } => {
             k.set_subtask_id(&parent, &subtask, &id)?;
             Outcome::SubtaskId { parent, subtask }
+        }
+        Command::Recent { limit } => Outcome::Recent(k.recent_lots(limit)?),
+        Command::Back => Outcome::Switched(k.back(Source::Manual)?),
+        Command::Label { id, name } => {
+            k.set_label(&id, &name)?;
+            Outcome::Label {
+                parent: id,
+                label: name,
+            }
         }
         Command::Config { key, value } => {
             if let Some(value) = &value {

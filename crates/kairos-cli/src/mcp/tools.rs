@@ -1,4 +1,4 @@
-//! Le registre des 14 outils MCP : définitions, lecture des paramètres, appel du service,
+//! Le registre des 17 outils MCP : définitions, lecture des paramètres, appel du service,
 //! règle d'autonomie. Aucune règle métier ici : tout passe par `Kairos`.
 
 use kairos_core::clock::Clock;
@@ -155,6 +155,24 @@ pub fn definitions() -> Vec<ToolDef> {
             &[],
         ),
         tool(
+            "recent",
+            "Les lots des 7 derniers jours (nom, ID Monday, temps du jour, lot en cours). À appeler quand l'utilisateur parle d'une tâche sans donner d'ID (« retourne sur Bundle », « on reprend ») pour retrouver le bon lot, puis appelle switch avec son ID ; plusieurs candidats ou aucun : demande.",
+            &[("limit", "integer", "Nombre de lots au plus (8 par défaut).")],
+            &[],
+        ),
+        tool(
+            "back",
+            "Revient au lot d'avant (arrête le lot actuel, relance le précédent). Deux appels de suite font l'aller-retour. À utiliser quand l'utilisateur veut reprendre ce qu'il faisait juste avant, sans nommer la tâche.",
+            &[],
+            &[],
+        ),
+        tool(
+            "set_label",
+            "Enregistre le nom d'une tâche parent dont tu connais l'ID (« Bundle », « Refonte »), pour la retrouver avec recent. À faire quand un lot a été lancé sans nom.",
+            &[("parent", "string", "ID Monday du parent."), ("label", "string", "Nom court de la tâche.")],
+            &["parent", "label"],
+        ),
+        tool(
             "set_subtask_id",
             "Mémorise l'ID Monday d'une sous-tâche d'un parent, quand l'utilisateur le donne.",
             &[("parent", "string", "ID Monday du parent."), ("subtask", "string", "Nom de la sous-tâche."), ("id", "string", "ID Monday de la sous-tâche (chiffres).")],
@@ -236,6 +254,19 @@ struct CloseDayParams {
 struct MarkDeclaredParams {
     date: Option<String>,
     confirm: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RecentParams {
+    limit: Option<usize>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SetLabelParams {
+    parent: String,
+    label: String,
 }
 
 #[derive(Deserialize)]
@@ -349,6 +380,22 @@ fn dispatch<C: Clock>(
                 subtask: p.subtask,
             };
             Outcome::EntryEdited(k.edit_entry(p.id, edit)?)
+        }
+        "recent" => {
+            let p: RecentParams = parse(args)?;
+            Outcome::Recent(k.recent_lots(p.limit.unwrap_or(8))?)
+        }
+        "back" => {
+            let _: NoParams = parse(args)?;
+            Outcome::Switched(k.back(source)?)
+        }
+        "set_label" => {
+            let p: SetLabelParams = parse(args)?;
+            k.set_label(&p.parent, &p.label)?;
+            Outcome::Label {
+                parent: p.parent,
+                label: p.label,
+            }
         }
         "set_subtask_id" => {
             let p: SetSubtaskIdParams = parse(args)?;
@@ -525,15 +572,18 @@ mod tests {
             .unwrap()
     }
 
-    const EXPECTED: [&str; 14] = [
+    const EXPECTED: [&str; 17] = [
         "add_entry",
+        "back",
         "close_day",
         "delete_entry",
         "edit_entry",
         "mark_declared",
         "pause",
+        "recent",
         "report",
         "resume",
+        "set_label",
         "set_subtask_id",
         "start",
         "status",
@@ -543,10 +593,68 @@ mod tests {
     ];
 
     #[test]
-    fn definitions_are_exactly_the_fourteen_tools() {
+    fn definitions_are_exactly_the_seventeen_tools() {
         let mut names: Vec<_> = definitions().iter().map(|d| d.name).collect();
         names.sort_unstable();
         assert_eq!(names, EXPECTED);
+    }
+
+    #[test]
+    fn recent_back_and_set_label_work() {
+        let (k, _d) = kairos();
+        success(
+            &k,
+            "start",
+            json!({"parent": "12406850311", "label": "Bundle"}),
+        );
+        k.clock().advance(600);
+        success(&k, "switch", json!({"parent": "12406856533"}));
+        k.clock().advance(600);
+        let recent = success(&k, "recent", json!({}));
+        assert_eq!(recent.as_array().unwrap().len(), 2);
+        assert_eq!(recent[0]["current"], true);
+        assert_eq!(recent[0]["lot"]["parent_monday_id"], "12406856533");
+        assert_eq!(recent[1]["lot"]["parent_label"], "Bundle");
+        let back = success(&k, "back", json!({}));
+        assert_eq!(back["started"]["lot"]["parent_monday_id"], "12406850311");
+        success(
+            &k,
+            "set_label",
+            json!({"parent": "12406850311", "label": "Bundle v2"}),
+        );
+        let limited = success(&k, "recent", json!({"limit": 1}));
+        assert_eq!(limited.as_array().unwrap().len(), 1);
+        assert_eq!(limited[0]["lot"]["parent_label"], "Bundle v2");
+        assert_eq!(
+            failed(&k, "set_label", json!({"parent": "1", "label": "x"}))["error"]["code"],
+            "parent_not_found"
+        );
+        let (fresh, _d2) = kairos();
+        assert_eq!(
+            failed(&fresh, "back", json!({}))["error"]["code"],
+            "no_previous_lot"
+        );
+    }
+
+    #[test]
+    fn the_new_tools_reject_bad_parameters() {
+        let (k, _d) = kairos();
+        for (name, args) in [
+            ("recent", json!({"limit": "3"})),
+            ("recent", json!({"limit": -1})),
+            ("recent", json!({"extra": 1})),
+            ("back", json!({"extra": 1})),
+            ("set_label", json!({"parent": "1"})),
+            ("set_label", json!({"label": "x"})),
+        ] {
+            assert!(
+                matches!(
+                    protocol_error(&k, name, args.clone()),
+                    ProtocolError::InvalidParams(_)
+                ),
+                "{name} {args}"
+            );
+        }
     }
 
     #[test]
