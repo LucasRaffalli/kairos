@@ -265,3 +265,36 @@ fn back_remembers_the_given_workdir_or_none() {
     k.back(Source::Manual, None).unwrap();
     assert_eq!(origin(k.status().unwrap()).1, None);
 }
+
+#[test]
+fn overview_reads_status_today_recent_and_choices_together() {
+    let (k, _d) = kairos();
+    let idle = k.overview(8, None).unwrap();
+    assert_eq!(idle.status, Status::Idle);
+    assert!(idle.today.entries.is_empty() && idle.recent.is_empty());
+    assert_eq!(idle.choices, k.subtask_choices(None).unwrap());
+
+    k.start(StartArgs {
+        subtask: Some("Retour icône".into()),
+        ..launched("12406850311", Source::Manual, None)
+    })
+    .unwrap();
+    k.clock().advance(600);
+    let running = k.overview(8, None).unwrap();
+    assert_eq!(running.status, k.status().unwrap());
+    assert_eq!(running.today, k.today(None).unwrap());
+    assert_eq!(running.recent, k.recent_lots(8).unwrap());
+    // Sans parent demandé : les sous-tâches du lot en cours.
+    assert_eq!(running.choices.own, ["Retour icône"]);
+    // Un parent demandé l'emporte.
+    assert!(k
+        .overview(8, Some("12406850412"))
+        .unwrap()
+        .choices
+        .own
+        .is_empty());
+    assert_eq!(k.overview(0, None).unwrap().recent.len(), 0);
+
+    k.pause().unwrap();
+    assert_eq!(k.overview(8, None).unwrap().choices.own, ["Retour icône"]);
+}

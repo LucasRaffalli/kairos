@@ -10,8 +10,8 @@ use kairos_core::clock::{Clock, SystemClock};
 use kairos_core::db::Db;
 use kairos_core::error::Error;
 use kairos_core::model::{
-    DayView, RecentLot, Source, StartArgs, StartedLot, Status, StoppedEntry, SubtaskChoices,
-    SwitchResult,
+    DayView, Overview, RecentLot, Source, StartArgs, StartedLot, Status, StoppedEntry,
+    SubtaskChoices, SwitchResult,
 };
 use kairos_core::service::Kairos;
 
@@ -88,19 +88,21 @@ pub fn open() -> BridgeResult<Kairos<SystemClock>> {
     Ok(Kairos::new(db, SystemClock))
 }
 
+/// Tout l'état en une lecture du cœur (une transaction), et l'heure du cœur.
 pub fn snapshot<C: Clock>(k: &Kairos<C>, home: &str) -> BridgeResult<Snapshot> {
-    let status = k.status()?;
-    let parent = match &status {
-        Status::Running { lot, .. } | Status::Paused { lot, .. } => lot.parent_monday_id.clone(),
-        Status::Idle => None,
-    };
+    let Overview {
+        status,
+        today,
+        recent,
+        choices,
+    } = k.overview(RECENT_LIMIT, None)?;
     Ok(Snapshot {
-        today: k.today(None)?,
-        recent: k.recent_lots(RECENT_LIMIT)?,
-        choices: k.subtask_choices(parent.as_deref())?,
+        status,
+        today,
+        recent,
+        choices,
         server_time: k.clock().now(),
         home: home.to_string(),
-        status,
     })
 }
 
@@ -164,9 +166,10 @@ fn hours_minutes(seconds: i64) -> String {
 /// La base est lue hors du fil principal, pour ne jamais figer l'interface pendant une attente
 /// de verrou.
 pub mod commands {
-    use tauri::{AppHandle, WebviewWindow};
+    use tauri::{AppHandle, State, WebviewWindow};
 
     use super::*;
+    use crate::inflight::InFlight;
 
     /// Ouvre la base et exécute `f` sur un fil de travail.
     async fn with_kairos<T, F>(f: F) -> BridgeResult<T>
@@ -177,6 +180,20 @@ pub mod commands {
         tauri::async_runtime::spawn_blocking(move || f(&open()?))
             .await
             .map_err(|e| BridgeError::from(Error::Internal(e.to_string())))?
+    }
+
+    /// Comme [`with_kairos`], pour une écriture : quitter attend qu'elle soit finie.
+    async fn with_action<T, F>(actions: &InFlight, f: F) -> BridgeResult<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&Kairos<SystemClock>) -> BridgeResult<T> + Send + 'static,
+    {
+        let guard = actions.begin();
+        with_kairos(move |k| {
+            let _guard = guard;
+            f(k)
+        })
+        .await
     }
 
     #[tauri::command]
@@ -191,28 +208,34 @@ pub mod commands {
     }
 
     #[tauri::command]
-    pub async fn start(request: StartRequest) -> BridgeResult<StartedLot> {
-        with_kairos(move |k| super::start(k, request)).await
+    pub async fn start(
+        actions: State<'_, InFlight>,
+        request: StartRequest,
+    ) -> BridgeResult<StartedLot> {
+        with_action(&actions, move |k| super::start(k, request)).await
     }
 
     #[tauri::command]
-    pub async fn switch(request: StartRequest) -> BridgeResult<SwitchResult> {
-        with_kairos(move |k| super::switch(k, request)).await
+    pub async fn switch(
+        actions: State<'_, InFlight>,
+        request: StartRequest,
+    ) -> BridgeResult<SwitchResult> {
+        with_action(&actions, move |k| super::switch(k, request)).await
     }
 
     #[tauri::command]
-    pub async fn stop() -> BridgeResult<StoppedEntry> {
-        with_kairos(super::stop).await
+    pub async fn stop(actions: State<'_, InFlight>) -> BridgeResult<StoppedEntry> {
+        with_action(&actions, super::stop).await
     }
 
     #[tauri::command]
-    pub async fn pause() -> BridgeResult<StoppedEntry> {
-        with_kairos(super::pause).await
+    pub async fn pause(actions: State<'_, InFlight>) -> BridgeResult<StoppedEntry> {
+        with_action(&actions, super::pause).await
     }
 
     #[tauri::command]
-    pub async fn resume() -> BridgeResult<StartedLot> {
-        with_kairos(super::resume).await
+    pub async fn resume(actions: State<'_, InFlight>) -> BridgeResult<StartedLot> {
+        with_action(&actions, super::resume).await
     }
 
     /// La hauteur du contenu, en pixels CSS : la fenêtre la suit, sous l'icône.
@@ -221,16 +244,22 @@ pub mod commands {
         crate::tray::resize_popover(&window, pixels);
     }
 
-    /// Quitte l'app, en arrêtant d'abord le lot si demandé. Si l'arrêt échoue, l'app reste
-    /// ouverte et l'interface montre le refus : on ne perd jamais un lot en silence.
-    /// L'argument s'écrit `stop_lot` côté interface, comme le JSON du cœur.
+    /// Quitte l'app, en arrêtant d'abord le lot si demandé, et une fois les actions en vol
+    /// terminées. Si l'arrêt échoue, l'app reste ouverte et l'interface montre le refus : on ne
+    /// perd jamais un lot en silence. L'argument s'écrit `stop_lot` côté interface, comme le
+    /// JSON du cœur.
     #[tauri::command(rename_all = "snake_case")]
-    pub async fn quit(app: AppHandle, stop_lot: bool) -> BridgeResult<()> {
+    pub async fn quit(
+        app: AppHandle,
+        actions: State<'_, InFlight>,
+        stop_lot: bool,
+    ) -> BridgeResult<()> {
         if stop_lot {
-            with_kairos(stop_if_running).await?;
+            with_action(&actions, stop_if_running).await?;
         }
-        app.exit(0);
-        Ok(())
+        tauri::async_runtime::spawn_blocking(move || crate::tray::exit_when_idle(&app))
+            .await
+            .map_err(|e| BridgeError::from(Error::Internal(e.to_string())))
     }
 }
 

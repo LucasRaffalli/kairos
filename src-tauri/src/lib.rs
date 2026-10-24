@@ -2,11 +2,12 @@
 //! `kairos-core`, où vivent toutes les règles métier.
 
 mod bridge;
+mod inflight;
 mod placement;
 mod tray;
 mod watcher;
 
-use tauri::{ActivationPolicy, Manager, RunEvent, WindowEvent};
+use tauri::{ActivationPolicy, Manager};
 
 pub fn run() {
     tauri::Builder::default()
@@ -17,6 +18,10 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(tray::LastBlur::default())
+        .manage(inflight::InFlight::default())
+        // Remplace le menu par défaut de macOS : son « Quitter » (⌘Q) fermerait l'app sans
+        // passer par le dialogue, son « Fermer la fenêtre » (⌘W) détruirait le popover.
+        .menu(tray::app_menu)
         .invoke_handler(tauri::generate_handler![
             bridge::commands::snapshot,
             bridge::commands::subtask_choices,
@@ -34,29 +39,11 @@ pub fn run() {
             tray::build(app.handle())?;
             watcher::spawn(app.handle().clone())?;
 
-            if let Some(window) = app.get_webview_window("popover") {
-                let handle = window.clone();
-                window.on_window_event(move |event| {
-                    // Perdre le focus ferme le popover, comme tout popover de macOS.
-                    if let WindowEvent::Focused(false) = event {
-                        handle.app_handle().state::<tray::LastBlur>().mark();
-                        let _ = handle.hide();
-                    }
-                });
+            if let Some(window) = app.get_webview_window(tray::POPOVER) {
+                tray::watch_popover(&window);
             }
             Ok(())
         })
-        .build(tauri::generate_context!())
-        .expect("erreur au lancement de Kairos")
-        .run(|app, event| {
-            // ⌘Q (menu de l'app) demande à quitter sans code : on passe par le même chemin que
-            // « Quitter Kairos ». `app.exit(0)`, lui, porte un code et quitte vraiment.
-            if let RunEvent::ExitRequested {
-                code: None, api, ..
-            } = event
-            {
-                api.prevent_exit();
-                tray::request_quit(app);
-            }
-        });
+        .run(tauri::generate_context!())
+        .expect("erreur au lancement de Kairos");
 }

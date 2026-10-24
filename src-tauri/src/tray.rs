@@ -6,15 +6,20 @@ use std::time::{Duration, Instant};
 use kairos_core::clock::{Clock, SystemClock};
 use kairos_core::model::Status;
 use tauri::image::Image;
-use tauri::menu::{Menu, MenuItem};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
+use tauri::{
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow, WindowEvent, Wry,
+};
 
 use crate::bridge;
+use crate::inflight::{InFlight, QUIT_WAIT};
 use crate::placement::{popover_height, popover_position, Rect, Size};
 
 const TRAY_ID: &str = "kairos";
-const POPOVER: &str = "popover";
+pub const POPOVER: &str = "popover";
+/// L'élément « Quitter Kairos », dans le menu de l'icône comme dans celui de l'app.
+const QUIT_ID: &str = "quit";
 
 /// Émis quand on quitte avec un lot en cours : le popover affiche le dialogue « Quitter ».
 pub const QUIT_REQUESTED: &str = "kairos://quit-requested";
@@ -57,7 +62,7 @@ impl LastBlur {
 }
 
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
-    let quit = MenuItem::with_id(app, "quit", "Quitter Kairos", true, Some("cmd+q"))?;
+    let quit = MenuItem::with_id(app, QUIT_ID, "Quitter Kairos", true, Some("cmd+q"))?;
     let menu = Menu::with_items(app, &[&quit])?;
     let icon = Image::from_bytes(include_bytes!("../icons/sources/tray-template.png"))?;
 
@@ -68,8 +73,9 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         // Le menu s'ouvre au clic droit seulement : le clic gauche est pour le popover.
         .show_menu_on_left_click(false)
+        // Ce gestionnaire est global : il reçoit aussi le « Quitter Kairos » du menu de l'app.
         .on_menu_event(|app, event| {
-            if event.id() == "quit" {
+            if event.id() == QUIT_ID {
                 request_quit(app);
             }
         })
@@ -125,13 +131,87 @@ pub fn request_quit(app: &AppHandle) {
             .and_then(|k| Ok(k.status()?))
             .map(|status| bridge::lot_is_running(&status));
         if let Ok(false) = running {
-            app.exit(0);
+            exit_when_idle(&app);
             return;
         }
         // Un lot tourne, ou la base ne répond pas : on demande plutôt que de deviner.
         show_popover(&app);
         let _ = app.emit(QUIT_REQUESTED, ());
     });
+}
+
+/// Quitte l'app une fois les actions en vol terminées (au plus [`QUIT_WAIT`]) : chaque action
+/// est une transaction, qu'on ne coupe pas. Bloquant : jamais sur le fil principal.
+pub fn exit_when_idle(app: &AppHandle) {
+    app.state::<InFlight>().wait_idle(QUIT_WAIT);
+    app.exit(0);
+}
+
+/// Ce qui arrive à la fenêtre du popover, réduit à ce qui compte pour elle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PopoverEvent {
+    LostFocus,
+    CloseRequested,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PopoverReaction {
+    /// Perdre le focus ferme le popover, comme tout popover de macOS (et on note l'instant,
+    /// voir [`BLUR_CLICK_WINDOW`]).
+    HideAfterBlur,
+    /// Le popover n'est jamais détruit : sans lui, l'icône ne répondrait plus. On le masque.
+    KeepAndHide,
+}
+
+pub fn popover_reaction(event: PopoverEvent) -> PopoverReaction {
+    match event {
+        PopoverEvent::LostFocus => PopoverReaction::HideAfterBlur,
+        PopoverEvent::CloseRequested => PopoverReaction::KeepAndHide,
+    }
+}
+
+/// Branche ces réactions sur la fenêtre du popover.
+pub fn watch_popover(window: &WebviewWindow) {
+    let handle = window.clone();
+    window.on_window_event(move |event| {
+        let (event, api) = match event {
+            WindowEvent::Focused(false) => (PopoverEvent::LostFocus, None),
+            WindowEvent::CloseRequested { api, .. } => (PopoverEvent::CloseRequested, Some(api)),
+            _ => return,
+        };
+        match popover_reaction(event) {
+            PopoverReaction::HideAfterBlur => handle.app_handle().state::<LastBlur>().mark(),
+            PopoverReaction::KeepAndHide => {
+                if let Some(api) = api {
+                    api.prevent_close();
+                }
+            }
+        }
+        let _ = handle.hide();
+    });
+}
+
+/// Le menu de l'app (barre de menus macOS, active quand le popover a le focus) : « Quitter
+/// Kairos » (⌘Q) passe par [`request_quit`], comme le menu de l'icône ; le menu Édition fait
+/// marcher ⌘C, ⌘V, ⌘A, ⌘Z dans les champs. Pas de « Fermer la fenêtre » : ⌘W ne fait rien.
+pub fn app_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
+    let quit = MenuItem::with_id(app, QUIT_ID, "Quitter Kairos", true, Some("cmd+q"))?;
+    let kairos = Submenu::with_items(app, "Kairos", true, &[&quit])?;
+    let edit = Submenu::with_items(
+        app,
+        "Édition",
+        true,
+        &[
+            &PredefinedMenuItem::undo(app, Some("Annuler"))?,
+            &PredefinedMenuItem::redo(app, Some("Rétablir"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::cut(app, Some("Couper"))?,
+            &PredefinedMenuItem::copy(app, Some("Copier"))?,
+            &PredefinedMenuItem::paste(app, Some("Coller"))?,
+            &PredefinedMenuItem::select_all(app, Some("Tout sélectionner"))?,
+        ],
+    )?;
+    Menu::with_items(app, &[&kairos, &edit])
 }
 
 /// Ajuste la hauteur du popover à son contenu (`pixels` : pixels CSS), plafonnée à l'écran,
@@ -278,6 +358,19 @@ mod tests {
     #[test]
     fn a_popover_that_just_lost_focus_to_this_click_stays_closed() {
         assert_eq!(toggle_action(false, true), ToggleAction::Hide);
+    }
+
+    #[test]
+    fn closing_the_popover_only_hides_it() {
+        // ⌘W ou une demande de fermeture : détruire la fenêtre laisserait l'icône sans popover.
+        assert_eq!(
+            popover_reaction(PopoverEvent::CloseRequested),
+            PopoverReaction::KeepAndHide
+        );
+        assert_eq!(
+            popover_reaction(PopoverEvent::LostFocus),
+            PopoverReaction::HideAfterBlur
+        );
     }
 
     #[test]

@@ -7,8 +7,9 @@ use crate::clock::Clock;
 use crate::db::Db;
 use crate::error::{Error, Result};
 use crate::model::{
-    AddEntry, Day, DayStatus, DayView, EditEntry, Entry, EntryView, KnownId, LotView, RecentLot,
-    Source, StartArgs, StartedLot, Status, StoppedEntry, SubtaskChoices, SwitchResult, Totals,
+    AddEntry, Day, DayStatus, DayView, EditEntry, Entry, EntryView, KnownId, LotView, Overview,
+    RecentLot, Source, StartArgs, StartedLot, Status, StoppedEntry, SubtaskChoices, SwitchResult,
+    Totals,
 };
 use crate::report::{self, Report, ReportEntry};
 use crate::timeline::{self, Interval};
@@ -151,33 +152,7 @@ impl<C: Clock> Kairos<C> {
     }
 
     pub fn status(&self) -> Result<Status> {
-        self.with_tx(|ctx| {
-            if let Some((entry_id, lot_id, since)) = open_entry(ctx)? {
-                let today = timeline::local_date(ctx.now, ctx.offset);
-                let origin = entry_origin(ctx, entry_id)?;
-                return Ok(Status::Running {
-                    lot: lot_view(ctx, lot_id)?,
-                    since,
-                    duration: (ctx.now - since).max(0),
-                    today_total: day_total(ctx, &today)?,
-                    launched_by: origin.source,
-                    workdir: origin.workdir,
-                });
-            }
-            if let Some(lot_id) = paused_lot(ctx)? {
-                let last = last_entry_of(ctx, lot_id)?;
-                let since = last.as_ref().and_then(|e| e.end).unwrap_or(ctx.now);
-                let duration = last.as_ref().map_or(0, |e| (since - e.start).max(0));
-                return Ok(Status::Paused {
-                    lot: lot_view(ctx, lot_id)?,
-                    since,
-                    duration,
-                    launched_by: last.as_ref().and_then(|e| e.source),
-                    workdir: last.and_then(|e| e.workdir),
-                });
-            }
-            Ok(Status::Idle)
-        })
+        self.with_tx(status_in)
     }
 
     /// La ventilation d'une journée : lignes, arrondi, recoupement avec les bornes, texte à saisir.
@@ -400,59 +375,37 @@ impl<C: Clock> Kairos<C> {
     /// Les sous-tâches à proposer pour un parent : le poste principal, les sous-tâches de base et
     /// celles propres à ce parent (aucune si on ne le connaît pas). Lecture seule.
     pub fn subtask_choices(&self, parent_monday_id: Option<&str>) -> Result<SubtaskChoices> {
-        self.with_tx(|ctx| {
-            let parent = clean_monday_id(&parent_monday_id.map(str::to_string))?;
-            let main = ctx.tx.query_row(
-                "SELECT value FROM settings WHERE key = 'main_subtask'",
-                [],
-                |r| r.get(0),
-            )?;
-            let names = |sql: &str, params: &[&dyn rusqlite::ToSql]| -> Result<Vec<String>> {
-                let mut stmt = ctx.tx.prepare(sql)?;
-                let rows = stmt.query_map(params, |r| r.get(0))?;
-                Ok(rows.collect::<rusqlite::Result<_>>()?)
-            };
-            Ok(SubtaskChoices {
-                main,
-                base: names(
-                    "SELECT name FROM subtasks WHERE parent_id IS NULL AND is_base = 1 ORDER BY id",
-                    &[],
-                )?,
-                own: names(
-                    "SELECT s.name FROM subtasks s JOIN parents p ON p.id = s.parent_id WHERE p.monday_id = ?1 ORDER BY s.id",
-                    &[&parent],
-                )?,
-            })
-        })
+        self.with_tx(|ctx| subtask_choices_in(ctx, parent_monday_id))
     }
 
     /// Les lots des 7 derniers jours, un par lot, du plus récent au plus ancien.
     pub fn recent_lots(&self, limit: usize) -> Result<Vec<RecentLot>> {
+        self.with_tx(|ctx| recent_lots_in(ctx, limit))
+    }
+
+    /// Tout ce qu'il faut pour dessiner l'app, lu dans **une** transaction (jamais un état
+    /// mélangé) : le statut, la journée, jusqu'à `recent_limit` lots récents et les sous-tâches
+    /// de `parent_monday_id`, à défaut du lot en cours ou en pause, à défaut du poste principal.
+    pub fn overview(
+        &self,
+        recent_limit: usize,
+        parent_monday_id: Option<&str>,
+    ) -> Result<Overview> {
         self.with_tx(|ctx| {
-            let since = ctx.now - 7 * 86_400;
-            let mut stmt = ctx.tx.prepare(
-                "SELECT lot_id, MAX(COALESCE(end_at, ?2)) AS last_end FROM entries WHERE removed = 0 AND COALESCE(end_at, ?2) >= ?1 GROUP BY lot_id ORDER BY last_end DESC, MAX(id) DESC LIMIT ?3",
-            )?;
-            let rows: Vec<(i64, i64)> = stmt
-                .query_map(params![since, ctx.now, i64::try_from(limit).unwrap_or(i64::MAX)], |r| {
-                    Ok((r.get(0)?, r.get(1)?))
-                })?
-                .collect::<rusqlite::Result<_>>()?;
-            let current = match open_entry(ctx)? {
-                Some((_, lot_id, _)) => Some(lot_id),
-                None => paused_lot(ctx)?,
+            let status = status_in(ctx)?;
+            let current_parent = match &status {
+                Status::Running { lot, .. } | Status::Paused { lot, .. } => {
+                    lot.parent_monday_id.clone()
+                }
+                Status::Idle => None,
             };
-            let today = timeline::local_date(ctx.now, ctx.offset);
-            let mut recent = Vec::new();
-            for (lot_id, last_end) in rows {
-                recent.push(RecentLot {
-                    lot: lot_view(ctx, lot_id)?,
-                    last_end,
-                    today_total: lot_day_total(ctx, lot_id, &today)?,
-                    current: current == Some(lot_id),
-                });
-            }
-            Ok(recent)
+            let parent = parent_monday_id.or(current_parent.as_deref());
+            Ok(Overview {
+                today: day_view(ctx, &timeline::local_date(ctx.now, ctx.offset))?,
+                recent: recent_lots_in(ctx, recent_limit)?,
+                choices: subtask_choices_in(ctx, parent)?,
+                status,
+            })
         })
     }
 
@@ -885,6 +838,90 @@ fn clear_pause(ctx: &Ctx) -> Result<()> {
     ctx.tx
         .execute("UPDATE state SET paused_lot_id = NULL WHERE id = 1", [])?;
     Ok(())
+}
+
+/// Ce que fait Kairos à cet instant, dans la transaction en cours.
+fn status_in(ctx: &Ctx) -> Result<Status> {
+    if let Some((entry_id, lot_id, since)) = open_entry(ctx)? {
+        let today = timeline::local_date(ctx.now, ctx.offset);
+        let origin = entry_origin(ctx, entry_id)?;
+        return Ok(Status::Running {
+            lot: lot_view(ctx, lot_id)?,
+            since,
+            duration: (ctx.now - since).max(0),
+            today_total: day_total(ctx, &today)?,
+            launched_by: origin.source,
+            workdir: origin.workdir,
+        });
+    }
+    if let Some(lot_id) = paused_lot(ctx)? {
+        let last = last_entry_of(ctx, lot_id)?;
+        let since = last.as_ref().and_then(|e| e.end).unwrap_or(ctx.now);
+        let duration = last.as_ref().map_or(0, |e| (since - e.start).max(0));
+        return Ok(Status::Paused {
+            lot: lot_view(ctx, lot_id)?,
+            since,
+            duration,
+            launched_by: last.as_ref().and_then(|e| e.source),
+            workdir: last.and_then(|e| e.workdir),
+        });
+    }
+    Ok(Status::Idle)
+}
+
+/// Les sous-tâches à proposer pour un parent, dans la transaction en cours.
+fn subtask_choices_in(ctx: &Ctx, parent_monday_id: Option<&str>) -> Result<SubtaskChoices> {
+    let parent = clean_monday_id(&parent_monday_id.map(str::to_string))?;
+    let main = ctx.tx.query_row(
+        "SELECT value FROM settings WHERE key = 'main_subtask'",
+        [],
+        |r| r.get(0),
+    )?;
+    let names = |sql: &str, params: &[&dyn rusqlite::ToSql]| -> Result<Vec<String>> {
+        let mut stmt = ctx.tx.prepare(sql)?;
+        let rows = stmt.query_map(params, |r| r.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    };
+    Ok(SubtaskChoices {
+        main,
+        base: names(
+            "SELECT name FROM subtasks WHERE parent_id IS NULL AND is_base = 1 ORDER BY id",
+            &[],
+        )?,
+        own: names(
+            "SELECT s.name FROM subtasks s JOIN parents p ON p.id = s.parent_id WHERE p.monday_id = ?1 ORDER BY s.id",
+            &[&parent],
+        )?,
+    })
+}
+
+/// Les lots récents, dans la transaction en cours.
+fn recent_lots_in(ctx: &Ctx, limit: usize) -> Result<Vec<RecentLot>> {
+    let since = ctx.now - 7 * 86_400;
+    let mut stmt = ctx.tx.prepare(
+        "SELECT lot_id, MAX(COALESCE(end_at, ?2)) AS last_end FROM entries WHERE removed = 0 AND COALESCE(end_at, ?2) >= ?1 GROUP BY lot_id ORDER BY last_end DESC, MAX(id) DESC LIMIT ?3",
+    )?;
+    let rows: Vec<(i64, i64)> = stmt
+        .query_map(
+            params![since, ctx.now, i64::try_from(limit).unwrap_or(i64::MAX)],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?
+        .collect::<rusqlite::Result<_>>()?;
+    let current = match open_entry(ctx)? {
+        Some((_, lot_id, _)) => Some(lot_id),
+        None => paused_lot(ctx)?,
+    };
+    let today = timeline::local_date(ctx.now, ctx.offset);
+    let mut recent = Vec::new();
+    for (lot_id, last_end) in rows {
+        recent.push(RecentLot {
+            lot: lot_view(ctx, lot_id)?,
+            last_end,
+            today_total: lot_day_total(ctx, lot_id, &today)?,
+            current: current == Some(lot_id),
+        });
+    }
+    Ok(recent)
 }
 
 /// Coupe l'entrée ouverte à chaque minuit local franchi : une entrée par jour, sur le même lot.

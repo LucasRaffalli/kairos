@@ -322,3 +322,12 @@ pub struct RecentLot {
     /// Le lot en cours ou en pause.
     pub current: bool,
 }
+
+/// Tout ce qu'il faut pour dessiner l'app, lu d'un coup (voir `Kairos::overview`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Overview {
+    pub status: Status,
+    pub today: DayView,
+    pub recent: Vec<RecentLot>,
+    pub choices: SubtaskChoices,
+}
