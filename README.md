@@ -39,10 +39,10 @@ Ajoute `--json` pour une réponse structurée (les erreurs aussi : `{"error":{"c
 brew install --cask lucasraffalli/kairos/kairos
 ```
 
-Déjà installé avant la 0.2.0 ? L'app s'est mise à jour toute seule, mais Homebrew n'a pas posé le lien `kairos` (le cask se met à jour par l'app, donc `brew upgrade` l'ignore). Une fois suffit :
+Déjà installé avant la 0.2.0 ? L'app s'est mise à jour toute seule, mais Homebrew n'a pas posé le lien `kairos` (le cask se met à jour par l'app, donc `brew upgrade` l'ignore). Une fois suffit, en mettant d'abord le tap à jour (sans quoi Homebrew réinstalle l'ancienne version) :
 
 ```bash
-brew reinstall --cask kairos
+brew update && brew reinstall --cask kairos
 ```
 
 Installé à la main par le DMG ? `brew install --cask --force lucasraffalli/kairos/kairos` remplace l'app et pose le lien.
