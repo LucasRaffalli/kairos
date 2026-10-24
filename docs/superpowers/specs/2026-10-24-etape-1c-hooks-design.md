@@ -53,14 +53,29 @@ Chaque lecture Git a un délai de 2 secondes ; un échec (pas un dépôt, Git ab
 
 **Cas de doute :**
 
-- plusieurs parents différents dans la même source ;
+- plusieurs parents dans le **message** ;
+- rien en cours, et la branche ou les commits citent plusieurs parents (voir « Plusieurs tâches sur une même branche ») ;
+- un lot est en cours, mais il n'est pas parmi les parents que citent la branche et les commits ;
 - la branche et les commits pointent vers deux parents différents ;
-- un lot est en cours et l'ID vient seulement de la branche, des commits ou de `.kairos.json` ;
 - un numéro nu jamais vu.
 
 Quand le hook **informe**, la ligne ajoutée au contexte de Claude (`additionalContext`) dit : « ID détecté <id> (<source>). Appelle `switch` (ou `start`) si c'est bien ça. » Quand il y a **doute** : « Doute : <ce qui est en conflit>. Demande à l'utilisateur lequel avant d'appeler `start` ou `switch`. Ne devine pas. » Quand le hook **agit seul**, un `systemMessage` visible dit ce qui a changé et comment revenir en arrière (`kairos switch <ancien lot>`) ; si le parent est nouveau pour Kairos, il l'écrit (« nouveau parent »). Aucune ligne n'est ajoutée quand il n'y a rien à dire.
 
 Deux sessions Claude Code en parallèle : le lot suit la dernière qui parle (le dernier message gagne), puisque chaque hook lit l'état courant.
+
+## Plusieurs tâches sur une même branche
+
+Cas fréquent : une branche, trois tâches, trois IDs Monday dans les commits (`[Monday #A]`, puis `#B`, puis `#C`). La branche et les commits donnent alors un **ensemble** de parents, pas un seul, et c'est normal :
+
+- **Un lot est en cours et il est dans l'ensemble** : tout est cohérent, **rien à dire**, même s'il y a trois parents. Ce n'est pas un doute.
+- **Rien en cours** : doute, la question liste les candidats (du commit le plus récent au plus ancien) pour que Claude demande sur laquelle tu travailles.
+- **Un lot est en cours mais n'est pas dans l'ensemble** : doute (« Kairos suit X, la branche concerne A, B, C »).
+- **Tu passes à la tâche suivante** : tu donnes son ID dans le message (source sûre) et le hook bascule. Un commit `[Monday #B]` ne bascule jamais le lot tout seul, puisqu'il ne dit pas ce que tu fais maintenant.
+- **Le rapport du soir** garde une ligne par parent : chaque `switch` coupe l'entrée, donc le temps de A, B et C est bien séparé.
+
+Le dernier commit n'est qu'un indice affiché dans la question (« dernier commit : #C »), jamais une décision.
+
+**Un même doute ne revient pas à chaque message** : une fois posé dans une session, le même doute (même texte) n'est plus rappelé tant qu'il ne change pas, pour que Claude ne te redemande pas toutes les minutes. Le hook garde pour cela un petit fichier `hook-state.json` à côté de la base (les 50 dernières sessions, par `session_id`) ; s'il est illisible ou impossible à écrire, le hook ignore le fichier et peut redemander, sans jamais échouer.
 
 ## Ce que fait `SessionStart`
 
@@ -105,9 +120,10 @@ Le scénario type : Lucas est sur la feature Bundle, une urgence arrive, il donn
 7. Dépôt sans commits, tête détachée, dossier hors dépôt : pas de source, pas d'erreur.
 8. `.kairos.json` invalide ou sans `parent` : ignoré, avec une ligne sur la sortie d'erreur.
 9. Un ID de commit qui est la sous-tâche mémorisée d'un parent connu : le lot est ce parent et cette sous-tâche.
-10. « Retourne sur Bundle » avec deux lots dont le libellé contient « bundle » : `recent` en rend deux, Claude demande lequel.
-11. `back` sans lot précédent, ou quand le lot précédent est déjà le lot en cours : `no_previous_lot`.
-12. `settings.json` absent (créé), vide (réécrit), invalide (refusé), avec des hooks d'autres outils (conservés).
+10. Une branche avec trois parents dans les commits : lot en cours dans l'ensemble → silence ; rien en cours → une seule question, pas répétée au message suivant ; lot hors ensemble → doute.
+11. « Retourne sur Bundle » avec deux lots dont le libellé contient « bundle » : `recent` en rend deux, Claude demande lequel.
+12. `back` sans lot précédent, ou quand le lot précédent est déjà le lot en cours : `no_previous_lot`.
+13. `settings.json` absent (créé), vide (réécrit), invalide (refusé), avec des hooks d'autres outils (conservés).
 
 ## Tests
 
@@ -115,6 +131,7 @@ Les règles de détection se testent sans entrée-sortie ; le reste sur le vrai 
 
 - **Cœur** : extraction des IDs (liens de plusieurs formes, numéros nus, faux positifs), décision pour toute la matrice `auto` / `ask` × situation, `resolve_monday_id` (parent, sous-tâche, inconnu).
 - **Hook** : un JSON valide dans chaque situation du tableau ; JSON invalide, vide, énorme, champs en trop ; sortie standard qui ne contient que du JSON ; code de sortie toujours 0 ; base verrouillée ou plus récente.
+- **Plusieurs tâches par branche** : les trois cas de la section ci-dessus ; le doute qui ne revient pas ; `hook-state.json` illisible, absent, impossible à écrire.
 - **Sources** : dépôt Git temporaire (branche avec ID, commits `[Monday #…]`, tête détachée), `.kairos.json` valide et invalide.
 - **Installation** : dans un faux `HOME` (création, relance sans doublon, conservation des réglages existants, sauvegarde, refus d'un JSON invalide, désinstallation, `--dry-run` qui n'écrit rien).
 - **Retour** : `recent_lots` (ordre, fenêtre de 7 jours, un seul exemplaire par lot, total du jour, lot en cours marqué) ; `back` (aller-retour, rien en cours, aucun précédent, temps additionné sur le même lot) ; les deux outils et les deux commandes sur le vrai binaire.
