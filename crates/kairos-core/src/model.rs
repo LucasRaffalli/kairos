@@ -270,3 +270,31 @@ mod tests {
         assert_eq!(lot(None, Some("Réunion"), None).describe(), "Réunion");
     }
 }
+
+/// Ce que Kairos sait d'un ID Monday.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum KnownId {
+    /// Un parent connu.
+    Parent { label: Option<String> },
+    /// L'ID mémorisé d'une sous-tâche : le parent et le nom de la sous-tâche.
+    Subtask {
+        parent_monday_id: String,
+        subtask: String,
+        label: Option<String>,
+    },
+    /// Jamais vu.
+    Unknown,
+}
+
+/// Un lot récent, avec ce qu'il faut pour le retrouver.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RecentLot {
+    pub lot: LotView,
+    /// Fin de sa dernière entrée (maintenant pour l'entrée ouverte).
+    pub last_end: i64,
+    /// Secondes chronométrées aujourd'hui sur ce lot.
+    pub today_total: i64,
+    /// Le lot en cours ou en pause.
+    pub current: bool,
+}

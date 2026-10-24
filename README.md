@@ -31,7 +31,7 @@ Ajoute `--json` pour une réponse structurée (les erreurs aussi : `{"error":{"c
 
 ## Brancher Claude (MCP)
 
-`kairos mcp` est un serveur MCP en stdio : Claude le lance, lui parle en JSON-RPC, et il s'arrête quand l'entrée se ferme. Il expose 14 outils (`start`, `stop`, `pause`, `resume`, `switch`, `status`, `today`, `report`, `add_entry`, `edit_entry`, `delete_entry`, `close_day`, `mark_declared`, `set_subtask_id`) qui appellent le même service que la ligne de commande. Aucun outil ne touche aux réglages.
+`kairos mcp` est un serveur MCP en stdio : Claude le lance, lui parle en JSON-RPC, et il s'arrête quand l'entrée se ferme. Il expose 17 outils (`start`, `stop`, `pause`, `resume`, `switch`, `back`, `status`, `today`, `recent`, `report`, `add_entry`, `edit_entry`, `delete_entry`, `close_day`, `mark_declared`, `set_subtask_id`, `set_label`) qui appellent le même service que la ligne de commande. Aucun outil ne touche aux réglages.
 
 **Installation (Mac Apple Silicon).** Le binaire `kairos` est dans l'app. Avec Homebrew, il arrive dans le PATH en même temps qu'elle :
 
@@ -63,7 +63,34 @@ claude mcp add kairos --scope user -- kairos mcp
 kairos config claude_autonomy auto
 ```
 
-**À mettre dans le CLAUDE.md** : nouvelle tâche → `switch` avec son ID ; ID inconnu → le demander, ne jamais le deviner ; sous-tâche non précisée → poste principal ; ne jamais arrêter un lot en fin de réponse.
+**Sans les hooks, à mettre dans le CLAUDE.md** : nouvelle tâche → `switch` avec son ID ; ID inconnu → le demander, ne jamais le deviner ; sous-tâche non précisée → poste principal ; ne jamais arrêter un lot en fin de réponse.
+
+## Les hooks de Claude Code
+
+Les hooks font suivre à Kairos le bon lot sans que tu y penses. Dans Claude Code :
+
+```bash
+kairos hooks install
+```
+
+Ça ajoute deux hooks dans `~/.claude/settings.json` (ou `$CLAUDE_CONFIG_DIR/settings.json`) et crée la commande `/kairos`. Rien d'autre n'est touché : tes autres hooks et réglages restent, un fichier invalide est refusé sans rien modifier, et l'ancien `settings.json` est sauvegardé (`settings.json.kairos-backup-…`). `--dry-run` montre ce qui serait fait ; `kairos hooks uninstall` retire tout ce que Kairos a ajouté. Redémarre Claude Code ensuite.
+
+- **`SessionStart`** donne à Claude l'état de Kairos et les règles (ne jamais arrêter un lot en fin de réponse, ne jamais deviner un ID, passer un nom à chaque lancement…). Plus besoin de les copier dans ton CLAUDE.md.
+- **`UserPromptSubmit`** cherche un ID Monday dans ton message, puis dans la branche Git, les derniers commits et `.kairos.json`. Aucun format n'est imposé : Kairos reconnaît la forme d'un ID (un lien Monday, ou 9 à 12 chiffres), `[Monday #A, #B]`, `closes #A` ou un simple numéro. Un commit peut en citer plusieurs.
+
+**Quand il est sûr, que fait-il ?** Cela dépend de `claude_autonomy` : en `auto`, il lance ou bascule tout seul (un ID écrit dans ton message bascule ; la branche ou les commits ne font que lancer quand rien ne tourne) ; en `ask` (défaut), il prévient seulement Claude.
+
+**Dans le doute, Claude te demande.** Plusieurs IDs dans le message, un numéro que Kairos ne reconnaît pas et qui n'a pas de repère (« ticket », « monday », `#`…), une branche qui contredit le lot en cours, rien en cours et plusieurs tâches sur la branche : le hook n'agit pas et dit à Claude de te poser la question. La même question n'est posée qu'une fois par session. Quand le lot en cours est l'une des tâches de la branche, il ne dit rien.
+
+**Revenir sur un lot sans ID** (« retourne sur Bundle », « on reprend ») : Claude appelle `recent` pour retrouver le lot, puis `switch` ; `back` revient au lot d'avant (deux fois de suite : l'aller-retour). Revenir sur un lot ouvre une nouvelle entrée : le temps déjà fait est conservé et s'additionne dans le rapport du soir. Pour que « Bundle » se retrouve, Claude enregistre un nom (`set_label`, ou `kairos label <ID> <nom>`).
+
+**`.kairos.json`** (facultatif, à la racine du dépôt) fixe le lot d'un projet :
+
+```json
+{ "parent": "12406850311", "label": "Bundle", "subtask": "Back" }
+```
+
+Seul `parent` est obligatoire. Kairos ne stocke jamais le texte de tes messages : il le lit pour y chercher des IDs, puis l'oublie.
 
 ## Construire le binaire embarqué
 

@@ -2,6 +2,7 @@
 //! appels de `kairos-core` et rend le résultat en texte ou en JSON.
 
 mod args;
+mod hook;
 mod mcp;
 mod render;
 mod time_input;
@@ -11,7 +12,7 @@ use clap::Parser;
 use kairos_core::clock::{Clock, FakeClock, SystemClock};
 use kairos_core::db::Db;
 use kairos_core::error::{Error, Result};
-use kairos_core::model::{AddEntry, EditEntry, StartArgs};
+use kairos_core::model::{AddEntry, EditEntry, Source, StartArgs};
 use kairos_core::service::Kairos;
 use kairos_core::timeline;
 use render::Outcome;
@@ -65,6 +66,12 @@ fn run() -> i32 {
     if matches!(cli.command, Command::Version) {
         println!("kairos {}", kairos_core::version());
         return 0;
+    }
+    if let Command::Hook { event } = &cli.command {
+        return hook::run(*event);
+    }
+    if let Command::Hooks { action } = &cli.command {
+        return hook::install::run(action);
     }
     if matches!(cli.command, Command::Mcp) {
         return mcp::server::run();
@@ -187,6 +194,12 @@ fn execute(k: &Kairos<AppClock>, command: Command) -> Result<(Outcome, Offsets)>
             k.set_subtask_id(&parent, &subtask, &id)?;
             Outcome::SubtaskId { parent, subtask }
         }
+        Command::Recent { limit } => Outcome::Recent(k.recent_lots(limit)?),
+        Command::Back => Outcome::Switched(k.back(Source::Manual)?),
+        Command::Label { id, name } => {
+            let label = k.set_label(&id, &name)?;
+            Outcome::Label { parent: id, label }
+        }
         Command::Config { key, value } => {
             if let Some(value) = &value {
                 k.config_set(&key, value)?;
@@ -194,9 +207,9 @@ fn execute(k: &Kairos<AppClock>, command: Command) -> Result<(Outcome, Offsets)>
             let value = k.config_get(&key)?;
             Outcome::Config { key, value }
         }
-        Command::Version | Command::Mcp => {
+        Command::Version | Command::Mcp | Command::Hook { .. } | Command::Hooks { .. } => {
             return Err(Error::Internal(
-                "`version` et `mcp` ne passent pas par le service".into(),
+                "`version`, `mcp` et `hook` ne passent pas par le service".into(),
             ))
         }
     };

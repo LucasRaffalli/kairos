@@ -1,10 +1,10 @@
 //! La sortie : du texte français lisible, ou du JSON stable.
 
 use kairos_core::model::{
-    Day, DayStatus, DayView, Entry, StartedLot, Status, StoppedEntry, SwitchResult,
+    Day, DayStatus, DayView, Entry, RecentLot, StartedLot, Status, StoppedEntry, SwitchResult,
 };
 use kairos_core::report::Report;
-use kairos_core::timeline::format_duration;
+use kairos_core::timeline::{format_duration, local_date};
 use serde_json::{json, Value};
 
 pub enum Outcome {
@@ -22,6 +22,8 @@ pub enum Outcome {
     EntryEdited(Entry),
     EntryDeleted(i64),
     SubtaskId { parent: String, subtask: String },
+    Recent(Vec<RecentLot>),
+    Label { parent: String, label: String },
     Config { key: String, value: String },
 }
 
@@ -161,6 +163,35 @@ pub fn text(outcome: &Outcome, offset: &dyn Fn(i64) -> i32) -> String {
             format!("ID Monday enregistré pour {subtask} sous {parent}.")
         }
         Outcome::Config { key, value } => format!("{key} = {value}"),
+        Outcome::Recent(lots) if lots.is_empty() => "Aucun lot récent.".to_string(),
+        Outcome::Recent(lots) => lots
+            .iter()
+            .map(|r| {
+                let name = match &r.lot.parent_label {
+                    Some(label) => format!("{label} — {}", r.lot.describe()),
+                    None => r.lot.describe(),
+                };
+                // Sans temps aujourd'hui, le lot a fini un autre jour : on le dit.
+                let end = if r.today_total == 0 {
+                    format!(
+                        "{} {}",
+                        local_date(r.last_end, offset),
+                        hm(r.last_end, offset)
+                    )
+                } else {
+                    hm(r.last_end, offset)
+                };
+                format!(
+                    "{} {name} · {} aujourd'hui · fin {end}",
+                    if r.current { "▶" } else { " " },
+                    format_duration(r.today_total),
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        Outcome::Label { parent, label } => {
+            format!("Le parent {parent} s'appelle maintenant « {label} ».")
+        }
     }
 }
 
@@ -247,5 +278,9 @@ pub fn to_json(outcome: &Outcome) -> Value {
             json!({ "parent": parent, "subtask": subtask, "saved": true })
         }
         Outcome::Config { key, value } => json!({ "key": key, "value": value }),
+        Outcome::Recent(lots) => value(lots),
+        Outcome::Label { parent, label } => {
+            json!({ "parent": parent, "label": label, "saved": true })
+        }
     }
 }
