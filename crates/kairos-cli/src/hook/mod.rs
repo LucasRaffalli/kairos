@@ -14,6 +14,7 @@ mod sources;
 mod state;
 
 use std::path::Path;
+use std::time::Duration;
 
 use kairos_core::clock::Clock;
 use kairos_core::db::Db;
@@ -32,7 +33,18 @@ struct Reply {
     message: Option<String>,
 }
 
+/// Claude Code coupe un hook après quelques secondes (5 dans nos réglages) : au-delà de ce garde-fou,
+/// on sort en silence plutôt que de se faire tuer au milieu d'une écriture.
+const WATCHDOG: Duration = Duration::from_millis(3_500);
+/// Attente maximale d'un verrou de la base, pour un hook.
+const DB_WAIT: Duration = Duration::from_secs(1);
+
 pub fn run(event: HookEvent) -> i32 {
+    std::thread::spawn(|| {
+        std::thread::sleep(WATCHDOG);
+        eprintln!("kairos hook : trop long, abandon");
+        std::process::exit(0);
+    });
     let outcome = std::panic::catch_unwind(|| try_run(event));
     match outcome {
         Ok(Ok(Some(json))) => println!("{json}"),
@@ -45,7 +57,10 @@ pub fn run(event: HookEvent) -> i32 {
 
 fn try_run(event: HookEvent) -> Result<Option<String>> {
     let input = input::read(std::io::stdin().lock());
-    let k = Kairos::new(Db::open(&Db::default_path())?, crate::app_clock());
+    let k = Kairos::new(
+        Db::open_with_timeout(&Db::default_path(), DB_WAIT)?,
+        crate::app_clock(),
+    );
     let (name, reply) = match event {
         HookEvent::SessionStart => ("SessionStart", session_start(&k)?),
         HookEvent::UserPrompt => ("UserPromptSubmit", user_prompt(&k, &input)?),
@@ -76,9 +91,9 @@ fn session_start<C: Clock>(k: &Kairos<C>) -> Result<Reply> {
 // --- UserPromptSubmit ---------------------------------------------------------------------------
 
 fn user_prompt<C: Clock>(k: &Kairos<C>, input: &input::HookInput) -> Result<Reply> {
-    let running_parent = match k.status()? {
-        Status::Running { lot, .. } | Status::Paused { lot, .. } => lot.parent_monday_id,
-        Status::Idle => None,
+    let (running_parent, running_lot) = match k.status()? {
+        Status::Running { lot, .. } | Status::Paused { lot, .. } => (lot.parent_monday_id, true),
+        Status::Idle => (None, false),
     };
     let autonomy = if k.config_get("claude_autonomy")? == "auto" {
         Autonomy::Auto
@@ -89,6 +104,7 @@ fn user_prompt<C: Clock>(k: &Kairos<C>, input: &input::HookInput) -> Result<Repl
     let message = resolve_all(k, detect::extract_ids(&input.prompt));
     let mut decide_input = DecideInput {
         running_parent,
+        running_lot,
         autonomy,
         message,
         branch_or_commits: vec![],
@@ -109,6 +125,18 @@ fn user_prompt<C: Clock>(k: &Kairos<C>, input: &input::HookInput) -> Result<Repl
             let text = inform_text(&plan);
             let key = format!("inform:{}:{:?}", plan.parent, decide_input.running_parent);
             once(input, &key, text)
+        }
+        // Un ID du message est un ordre de l'utilisateur ; la branche, les commits et `.kairos.json`
+        // lancent un lot une seule fois par session : après un arrêt volontaire, on ne relance pas
+        // à chaque message.
+        Decision::Act(plan) if plan.origin != Origin::Message => {
+            let key = format!("act:{}", plan.parent);
+            if state::already_asked(&input.session_id, &key) {
+                Reply::default()
+            } else {
+                state::mark_asked(&input.session_id, &key);
+                act(k, input, &plan)
+            }
         }
         Decision::Act(plan) => act(k, input, &plan),
     })

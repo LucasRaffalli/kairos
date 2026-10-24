@@ -3,6 +3,8 @@ description: État de Kairos, ou bascule vers une tâche (ID Monday ou nom)
 argument-hint: [ID Monday ou nom de la tâche]
 ---
 
+<!-- kairos:command : fichier géré par `kairos hooks install` ; `kairos hooks uninstall` le retire -->
+
 Utilise les outils MCP de Kairos.
 
 Argument de l'utilisateur : $ARGUMENTS

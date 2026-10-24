@@ -416,7 +416,11 @@ impl<C: Clock> Kairos<C> {
     /// cours ; si rien ne tourne, relance le lot de la dernière entrée fermée.
     pub fn back(&self, source: Source) -> Result<SwitchResult> {
         let target = self.with_tx(|ctx| {
-            let running = open_entry(ctx)?.map(|(_, lot_id, _)| lot_id);
+            // Le lot en pause compte comme le lot courant, comme dans `recent_lots`.
+            let running = match open_entry(ctx)? {
+                Some((_, lot_id, _)) => Some(lot_id),
+                None => paused_lot(ctx)?,
+            };
             let lot_id: Option<i64> = ctx
                 .tx
                 .query_row(

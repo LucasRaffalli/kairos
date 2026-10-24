@@ -73,7 +73,7 @@ pub fn mark_asked(session_id: &str, key: &str) {
     state["order"] = Value::Array(order);
     // Écriture en deux temps : un hook interrompu ne laisse pas un fichier à moitié écrit.
     let target = path();
-    let tmp = target.with_extension("json.tmp");
+    let tmp = target.with_extension(format!("json.tmp{}", std::process::id()));
     if std::fs::write(&tmp, state.to_string()).is_ok() {
         let _ = std::fs::rename(&tmp, &target);
     }

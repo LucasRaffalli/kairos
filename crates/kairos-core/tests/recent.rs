@@ -202,3 +202,21 @@ fn set_label_rejects_unknown_parent_and_bad_labels() {
         "invalid_monday_id"
     );
 }
+
+#[test]
+fn back_during_a_pause_goes_to_the_lot_before_the_paused_one() {
+    let (k, _d) = kairos();
+    k.start(lot("12406850311")).unwrap();
+    k.clock().advance(600);
+    k.switch_to(lot("12406856533")).unwrap();
+    k.clock().advance(600);
+    k.pause().unwrap();
+    k.clock().advance(60);
+    // `recent` marque B comme lot courant (en pause) : `back` doit donc aller sur A, pas relancer B.
+    assert!(k.recent_lots(8).unwrap()[0].current);
+    let back = k.back(Source::ClaudeCode).unwrap();
+    assert_eq!(
+        back.started.lot.parent_monday_id.as_deref(),
+        Some("12406850311")
+    );
+}

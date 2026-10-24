@@ -8,9 +8,14 @@
 
 /// Longueur d'un ID Monday : 9 à 12 chiffres, sans zéro initial.
 const ID_DIGITS: std::ops::RangeInclusive<usize> = 9..=12;
-/// Un repère doit se trouver à cette distance (en caractères) devant l'ID, sur la même ligne.
-const MARKER_WINDOW: usize = 12;
-const MARKERS: [&str; 6] = ["monday", "ticket", "tâche", "task", "item", "pulse"];
+/// On ne regarde que ces derniers caractères (de la même ligne) devant un ID pour y trouver un repère.
+const MARKER_WINDOW: usize = 24;
+/// Au plus ce nombre d'IDs distincts : au-delà de un c'est déjà un doute, et un texte énorme ne doit
+/// jamais ralentir un hook.
+pub const MAX_IDS: usize = 20;
+/// Mots qui introduisent un ID (« ticket 123 », « task-123 »…), entiers et au singulier.
+const MARKERS: [&str; 5] = ["ticket", "tâche", "tache", "task", "item"];
+const MARKERS_WITH_SEPARATOR: [&str; 2] = ["monday", "pulse"];
 
 /// Un ID trouvé dans un texte.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,9 +26,25 @@ pub struct FoundId {
     pub sure_by_shape: bool,
 }
 
-/// Tous les IDs Monday d'un texte, dans l'ordre d'apparition, sans doublon.
+/// Tous les IDs Monday d'un texte, dans l'ordre d'apparition, sans doublon, au plus [`MAX_IDS`].
 pub fn extract_ids(text: &str) -> Vec<FoundId> {
     let mut found: Vec<(usize, FoundId)> = Vec::new();
+    let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut add =
+        |at: usize, id: &str, sure: bool, found: &mut Vec<(usize, FoundId)>| match index.get(id) {
+            Some(&i) => found[i].1.sure_by_shape |= sure,
+            None if index.len() < MAX_IDS => {
+                index.insert(id.to_string(), found.len());
+                found.push((
+                    at,
+                    FoundId {
+                        id: id.to_string(),
+                        sure_by_shape: sure,
+                    },
+                ));
+            }
+            None => {}
+        };
     let mut link_spans: Vec<(usize, usize)> = Vec::new();
 
     // Les liens d'abord : on n'y lit que l'ID de l'élément, jamais l'ID du tableau ou de la vue.
@@ -36,24 +57,19 @@ pub fn extract_ids(text: &str) -> Vec<FoundId> {
             (None, false) => start = Some(i),
             (Some(from), true) => {
                 let token = &text[from..i];
-                if token.to_lowercase().contains("monday.com") {
+                let lower = token.to_lowercase();
+                if lower.contains("monday.com") && link_spans.len() < 64 {
                     link_spans.push((from, i));
                     for key in ["/pulses/", "/items/"] {
                         let mut search = 0;
-                        while let Some(at) = token[search..].find(key) {
+                        while let Some(at) = lower[search..].find(key) {
                             let digits_at = search + at + key.len();
-                            let digits: String = token[digits_at..]
+                            let digits: String = lower[digits_at..]
                                 .chars()
                                 .take_while(char::is_ascii_digit)
                                 .collect();
                             if valid_shape(&digits) {
-                                found.push((
-                                    from + digits_at,
-                                    FoundId {
-                                        id: digits,
-                                        sure_by_shape: true,
-                                    },
-                                ));
+                                add(from + digits_at.min(token.len()), &digits, true, &mut found);
                             }
                             search = digits_at;
                         }
@@ -93,29 +109,12 @@ pub fn extract_ids(text: &str) -> Vec<FoundId> {
                     .chars()
                     .all(|c| c.is_whitespace() && c != '\n' || matches!(c, ',' | ';' | '&' | '+'))
             });
-        if marked {
-            previous_marked_end = Some(i);
-        } else {
-            previous_marked_end = None;
-        }
-        found.push((
-            from,
-            FoundId {
-                id: digits.to_string(),
-                sure_by_shape: marked,
-            },
-        ));
+        previous_marked_end = marked.then_some(i);
+        add(from, digits, marked, &mut found);
     }
 
     found.sort_by_key(|(at, _)| *at);
-    let mut unique: Vec<FoundId> = Vec::new();
-    for (_, f) in found {
-        match unique.iter_mut().find(|u| u.id == f.id) {
-            Some(existing) => existing.sure_by_shape |= f.sure_by_shape,
-            None => unique.push(f),
-        }
-    }
-    unique
+    found.into_iter().map(|(_, f)| f).collect()
 }
 
 fn valid_shape(digits: &str) -> bool {
@@ -124,16 +123,45 @@ fn valid_shape(digits: &str) -> bool {
         && digits.bytes().all(|b| b.is_ascii_digit())
 }
 
+/// Un repère introduit-il l'ID qui commence à `at` ? Seuls les derniers caractères de la même ligne
+/// comptent. Il faut `#` collé à l'ID (et pas collé à un mot), ou un mot-repère entier juste devant
+/// (« ticket 123 », « task-123 », « ticket n° 123 », « monday: 123 »). « Monday 123 » (le jour de
+/// la semaine), « multitask 123 » ou « #42 date de 123 » ne comptent pas.
 fn has_marker_before(text: &str, at: usize) -> bool {
-    let line_start = text[..at].rfind('\n').map_or(0, |n| n + 1);
-    let window: String = {
-        let chars: Vec<char> = text[line_start..at].chars().collect();
-        chars[chars.len().saturating_sub(MARKER_WINDOW)..]
-            .iter()
-            .collect::<String>()
-            .to_lowercase()
-    };
-    window.contains('#') || MARKERS.iter().any(|m| window.contains(m))
+    let mut reversed: Vec<char> = Vec::with_capacity(MARKER_WINDOW);
+    for c in text[..at].chars().rev().take(MARKER_WINDOW) {
+        if c == '\n' {
+            break;
+        }
+        reversed.push(c);
+    }
+    let window: String = reversed.into_iter().rev().collect();
+
+    if let Some(rest) = window.strip_suffix('#') {
+        return !rest.chars().next_back().is_some_and(char::is_alphanumeric);
+    }
+    let separators = [' ', '\t', ':', '=', '-', '°', 'º', '#'];
+    let trimmed = window.trim_end_matches(separators);
+    let separator = &window[trimmed.len()..];
+    // « ticket n° 123 » : le « n » du numéro n'est pas un mot.
+    let trimmed = trimmed
+        .strip_suffix(" n")
+        .or_else(|| trimmed.strip_suffix(" no"))
+        .map_or(trimmed, |t| t.trim_end_matches(separators));
+    let word: String = trimmed
+        .chars()
+        .rev()
+        .take_while(|c| c.is_alphabetic())
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<String>()
+        .to_lowercase();
+    if MARKERS.contains(&word.as_str()) {
+        return true;
+    }
+    // « monday » et « pulse » seuls sont ambigus (le lundi) : il leur faut un `:` ou un `=`.
+    MARKERS_WITH_SEPARATOR.contains(&word.as_str()) && separator.contains([':', '='])
 }
 
 /// Le réglage `claude_autonomy`.
@@ -176,6 +204,8 @@ impl Resolved {
 pub struct DecideInput {
     /// Le parent du lot en cours (ou en pause), s'il y en a un.
     pub running_parent: Option<String>,
+    /// Un lot tourne ou est en pause, même sans parent Monday (une réunion, une tâche nommée).
+    pub running_lot: bool,
     pub autonomy: Autonomy,
     /// Les parents cités dans le message de l'utilisateur.
     pub message: Vec<Resolved>,
@@ -211,6 +241,7 @@ pub enum Decision {
 
 pub fn decide(input: &DecideInput) -> Decision {
     let running = input.running_parent.as_deref();
+    let busy = running.is_some() || input.running_lot;
 
     if !input.message.is_empty() {
         if input.message.len() > 1 {
@@ -229,7 +260,7 @@ pub fn decide(input: &DecideInput) -> Decision {
         if running == Some(found.parent.as_str()) {
             return Decision::Nothing;
         }
-        return act(input, found, Origin::Message, running.is_some());
+        return act(input, found, Origin::Message, busy);
     }
 
     if !input.branch_or_commits.is_empty() {
@@ -246,6 +277,12 @@ pub fn decide(input: &DecideInput) -> Decision {
             }
             return doubt(format!(
                 "Kairos suit {run}, mais la branche et les commits concernent {}",
+                list(set)
+            ));
+        }
+        if busy {
+            return doubt(format!(
+                "Kairos suit un lot sans ID Monday, mais la branche et les commits concernent {}",
                 list(set)
             ));
         }
@@ -269,6 +306,10 @@ pub fn decide(input: &DecideInput) -> Decision {
             Some(run) if run == config.parent => Decision::Nothing,
             Some(run) => doubt(format!(
                 "Kairos suit {run}, mais .kairos.json indique {}",
+                config.describe()
+            )),
+            None if busy => doubt(format!(
+                "Kairos suit un lot sans ID Monday, mais .kairos.json indique {}",
                 config.describe()
             )),
             None => act(input, config, Origin::Config, false),
@@ -403,6 +444,7 @@ mod tests {
     fn input(running: Option<&str>, autonomy: Autonomy) -> DecideInput {
         DecideInput {
             running_parent: running.map(String::from),
+            running_lot: running.is_some(),
             autonomy,
             message: vec![],
             branch_or_commits: vec![],
@@ -570,6 +612,81 @@ mod tests {
         i.branch_or_commits = vec![resolved(B)];
         i.config = Some(resolved(C));
         assert_eq!(plan(&decide(&i)).parent, A);
+    }
+
+    #[test]
+    fn a_running_lot_without_a_parent_is_never_replaced_by_the_branch_or_the_config() {
+        for autonomy in [Autonomy::Auto, Autonomy::Ask] {
+            let mut i = input(None, autonomy);
+            i.running_lot = true;
+            i.branch_or_commits = vec![resolved(A)];
+            assert_asks(doubt(&decide(&i)));
+            let mut i = input(None, autonomy);
+            i.running_lot = true;
+            i.config = Some(resolved(A));
+            assert_asks(doubt(&decide(&i)));
+        }
+        // Dans le message, un ID sûr remplace bien un lot sans parent.
+        let mut i = input(None, Autonomy::Auto);
+        i.running_lot = true;
+        i.message = vec![resolved(A)];
+        assert!(plan(&decide(&i)).replaces_running);
+    }
+
+    #[test]
+    fn a_marker_must_really_introduce_the_number() {
+        // Faux repères : un autre nombre derrière le `#`, un mot dont le repère n'est qu'un morceau,
+        // le jour de la semaine, un titre Markdown, un `#` collé à une lettre.
+        for (text, id) in [
+            ("la PR #42 date de 1792774800", "1792774800"),
+            ("multitask 1792774800", "1792774800"),
+            ("items: 123456789 unités", "123456789"),
+            ("Monday 1792774800", "1792774800"),
+            ("## Logs 1792774800", "1792774800"),
+            ("c#1234567890", "1234567890"),
+            ("# 1792774800", "1792774800"),
+            ("retask 1792774800", "1792774800"),
+        ] {
+            assert_eq!(ids(text), [unsure(id)], "{text}");
+        }
+        // Vrais repères.
+        for text in [
+            format!("ticket n° {A}"),
+            format!("Ticket: {A}"),
+            format!("tâche {A}"),
+            format!("TASK-{A}"),
+            format!("monday: {A}"),
+            format!("Monday #{A}"),
+            format!("item {A}"),
+            format!("pulse={A}"),
+            format!("#{A}"),
+        ] {
+            assert_eq!(ids(&text), [sure(A)], "{text}");
+        }
+        // Un lien en majuscules.
+        assert_eq!(
+            ids(&format!("https://x.monday.com/boards/1/Pulses/{A}")),
+            [sure(A)]
+        );
+    }
+
+    #[test]
+    fn extraction_stays_fast_and_bounded_on_a_huge_text() {
+        let distinct: String = (0..90_000u64)
+            .map(|i| format!("{} ", 1_000_000_000 + i))
+            .collect();
+        let started = std::time::Instant::now();
+        let found = extract_ids(&distinct);
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(3),
+            "{:?}",
+            started.elapsed()
+        );
+        assert_eq!(found.len(), MAX_IDS);
+        let one_line = "x".repeat(1_000_000) + " 12406850311";
+        let started = std::time::Instant::now();
+        assert_eq!(extract_ids(&one_line).len(), 1);
+        assert!(started.elapsed() < std::time::Duration::from_secs(3));
     }
 
     #[test]

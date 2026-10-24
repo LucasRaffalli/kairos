@@ -290,3 +290,75 @@ fn uninstall_without_any_settings_is_a_no_op() {
     assert_eq!(code(&h.run(&["hooks", "uninstall"])), Some(0));
     assert!(!h.settings().exists());
 }
+
+#[cfg(unix)]
+#[test]
+fn a_symlinked_settings_file_stays_a_symlink_and_keeps_its_permissions() {
+    use std::os::unix::fs::{symlink, PermissionsExt};
+    let h = Home::new();
+    let dotfiles = tempfile::tempdir().unwrap();
+    let target = dotfiles.path().join("claude-settings.json");
+    std::fs::write(&target, r#"{"env":{"CLE":"secrète"}}"#).unwrap();
+    std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600)).unwrap();
+    symlink(&target, h.settings()).unwrap();
+    assert_eq!(code(&h.run(&["hooks", "install"])), Some(0));
+    assert!(std::fs::symlink_metadata(h.settings())
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    let written: Value = serde_json::from_str(&std::fs::read_to_string(&target).unwrap()).unwrap();
+    assert_eq!(written["env"]["CLE"], "secrète");
+    assert_eq!(ours(&written, "SessionStart").len(), 1);
+    assert_eq!(
+        std::fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+    // Un fichier ordinaire en 0600 le reste aussi, à la désinstallation.
+    assert_eq!(code(&h.run(&["hooks", "uninstall"])), Some(0));
+    assert_eq!(
+        std::fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+}
+
+#[test]
+fn an_older_kairos_command_file_is_updated_and_an_edited_one_is_not_ours() {
+    let h = Home::new();
+    std::fs::create_dir_all(h.command_file().parent().unwrap()).unwrap();
+    // Un fichier d'une ancienne version de Kairos : reconnu à son repère, donc mis à jour.
+    std::fs::write(
+        h.command_file(),
+        "<!-- kairos:command -->\nancienne version",
+    )
+    .unwrap();
+    assert_eq!(code(&h.run(&["hooks", "install"])), Some(0));
+    let now = std::fs::read_to_string(h.command_file()).unwrap();
+    assert!(
+        now.contains("$ARGUMENTS") && now.contains("<!-- kairos:command"),
+        "{now}"
+    );
+    // Désinstallation : le fichier marqué est retiré, même d'une ancienne version.
+    std::fs::write(
+        h.command_file(),
+        "<!-- kairos:command -->\nencore une autre",
+    )
+    .unwrap();
+    assert_eq!(code(&h.run(&["hooks", "uninstall"])), Some(0));
+    assert!(!h.command_file().exists());
+}
+
+#[test]
+fn uninstall_keeps_an_empty_entry_the_user_had_before() {
+    let h = Home::new();
+    std::fs::write(
+        h.settings(),
+        json!({ "hooks": { "UserPromptSubmit": [{ "hooks": [] }] } }).to_string(),
+    )
+    .unwrap();
+    h.run(&["hooks", "install"]);
+    h.run(&["hooks", "uninstall"]);
+    assert_eq!(
+        h.read_settings()["hooks"]["UserPromptSubmit"],
+        json!([{ "hooks": [] }])
+    );
+}

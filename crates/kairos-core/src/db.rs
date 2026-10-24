@@ -40,12 +40,18 @@ impl Db {
     /// Une base dont le `user_version` dépasse celui connu est refusée **avant** toute
     /// écriture : une version plus ancienne ne doit jamais abîmer une base plus récente.
     pub fn open(path: &Path) -> Result<Db> {
+        Db::open_with_timeout(path, BUSY_TIMEOUT)
+    }
+
+    /// Comme [`Db::open`], avec une attente maximale choisie : un hook de Claude Code, coupé après
+    /// quelques secondes, ne peut pas attendre 5 s un verrou.
+    pub fn open_with_timeout(path: &Path, timeout: Duration) -> Result<Db> {
         // SQLite répond « occupé » tout de suite, sans attendre, à certaines collisions à la
         // création de la base (deux processus qui passent en WAL ensemble) : on réessaie
         // jusqu'à l'échéance, comme le ferait `busy_timeout` s'il s'appliquait ici.
-        let deadline = Instant::now() + BUSY_TIMEOUT;
+        let deadline = Instant::now() + timeout;
         loop {
-            match Db::open_once(path) {
+            match Db::open_once(path, timeout) {
                 Err(Error::DbUnavailable) if Instant::now() < deadline => {
                     std::thread::sleep(Duration::from_millis(25))
                 }
@@ -54,12 +60,12 @@ impl Db {
         }
     }
 
-    fn open_once(path: &Path) -> Result<Db> {
+    fn open_once(path: &Path, timeout: Duration) -> Result<Db> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
         let conn = Connection::open(path)?;
-        conn.busy_timeout(BUSY_TIMEOUT)?;
+        conn.busy_timeout(timeout)?;
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
         if version > LATEST_VERSION {
             return Err(Error::DbNewer);

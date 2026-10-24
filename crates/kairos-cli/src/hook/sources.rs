@@ -67,38 +67,54 @@ pub struct ConfigFile {
 }
 
 /// Cherche `.kairos.json` en remontant depuis `cwd` jusqu'à la racine du dépôt (le dossier qui
-/// contient `.git`). Invalide ou sans `parent` numérique : ignoré, avec une ligne sur la sortie
-/// d'erreur.
+/// contient `.git`) : hors d'un dépôt, on ne lit rien (un fichier déposé dans `/tmp` ou dans un
+/// dossier parent ne doit pas s'appliquer à tout). Le fichier est validé : `parent` doit avoir la
+/// forme d'un ID Monday, `label` et `subtask` tenir sur une ligne ; sinon il est ignoré en entier,
+/// avec une ligne sur la sortie d'erreur (son texte part dans le contexte de Claude).
 pub fn kairos_json(cwd: &Path) -> Option<ConfigFile> {
+    let root = cwd.ancestors().take(32).find(|d| d.join(".git").exists())?;
     for dir in cwd.ancestors().take(32) {
         let file = dir.join(".kairos.json");
         if file.is_file() {
             return read_config(&file);
         }
-        if dir.join(".git").exists() {
-            return None;
+        if dir == root {
+            break;
         }
     }
     None
 }
 
+/// Un nom (libellé, sous-tâche) : une ligne, 120 caractères au plus ; vide = absent.
+fn clean_name(raw: Option<String>) -> Result<Option<String>, String> {
+    let Some(raw) = raw else { return Ok(None) };
+    let text = raw.trim();
+    if text.is_empty() {
+        return Ok(None);
+    }
+    if text.chars().any(char::is_control) || text.chars().count() > 120 {
+        return Err("un nom doit tenir sur une ligne, 120 caractères au plus".into());
+    }
+    Ok(Some(text.to_string()))
+}
+
 fn read_config(file: &PathBuf) -> Option<ConfigFile> {
     let parsed = std::fs::read_to_string(file)
         .map_err(|e| e.to_string())
-        .and_then(|text| serde_json::from_str::<ConfigFile>(&text).map_err(|e| e.to_string()));
+        .and_then(|text| serde_json::from_str::<ConfigFile>(&text).map_err(|e| e.to_string()))
+        .and_then(|config| {
+            let ids = kairos_core::detect::extract_ids(&config.parent);
+            if ids.len() != 1 || ids[0].id != config.parent {
+                return Err("« parent » doit être un ID Monday (9 à 12 chiffres)".to_string());
+            }
+            Ok(ConfigFile {
+                label: clean_name(config.label)?,
+                subtask: clean_name(config.subtask)?,
+                ..config
+            })
+        });
     match parsed {
-        Ok(config)
-            if !config.parent.is_empty() && config.parent.bytes().all(|b| b.is_ascii_digit()) =>
-        {
-            Some(config)
-        }
-        Ok(_) => {
-            eprintln!(
-                "kairos hook : {} : « parent » doit être un ID Monday (chiffres)",
-                file.display()
-            );
-            None
-        }
+        Ok(config) => Some(config),
         Err(why) => {
             eprintln!("kairos hook : {} ignoré : {why}", file.display());
             None
@@ -133,16 +149,43 @@ mod tests {
     #[test]
     fn invalid_configs_are_ignored() {
         let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".git")).unwrap();
+        let long = "x".repeat(121);
         for bad in [
-            "{ pas du json",
-            "{}",
-            r#"{"parent":""}"#,
-            r#"{"parent":"abc"}"#,
-            r#"{"parent":12}"#,
+            "{ pas du json".to_string(),
+            "{}".to_string(),
+            r#"{"parent":""}"#.to_string(),
+            r#"{"parent":"abc"}"#.to_string(),
+            r#"{"parent":12}"#.to_string(),
+            r#"{"parent":"1"}"#.to_string(),
+            r#"{"parent":"123456789012345678901"}"#.to_string(),
+            r#"{"parent":"12406850311","label":"deux\nlignes"}"#.to_string(),
+            format!(r#"{{"parent":"12406850311","label":"{long}"}}"#),
+            r#"{"parent":"12406850311","subtask":"a\u0000b"}"#.to_string(),
         ] {
-            std::fs::write(dir.path().join(".kairos.json"), bad).unwrap();
+            std::fs::write(dir.path().join(".kairos.json"), &bad).unwrap();
             assert_eq!(kairos_json(dir.path()), None, "{bad}");
         }
+        std::fs::write(
+            dir.path().join(".kairos.json"),
+            r#"{"parent":"12406850311","label":" Bundle "}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            kairos_json(dir.path()).unwrap().label.as_deref(),
+            Some("Bundle")
+        );
+    }
+
+    #[test]
+    fn kairos_json_outside_a_repository_is_never_read() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join(".kairos.json"),
+            r#"{"parent":"12406850311"}"#,
+        )
+        .unwrap();
+        assert_eq!(kairos_json(dir.path()), None);
     }
 
     #[test]

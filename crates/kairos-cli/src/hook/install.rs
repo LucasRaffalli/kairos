@@ -13,6 +13,7 @@ use serde_json::{json, Map, Value};
 use crate::args::HooksAction;
 
 const COMMAND_FILE: &str = include_str!("kairos_command.md");
+const COMMAND_MARKER: &str = "<!-- kairos:command";
 /// Délai accordé à un hook par Claude Code, en secondes.
 const HOOK_TIMEOUT: u64 = 5;
 /// (événement de Claude Code, argument de `kairos hook`)
@@ -115,16 +116,17 @@ fn remove_ours(settings: &mut Map<String, Value>) {
         let Some(Value::Array(entries)) = hooks.get_mut(&event) else {
             continue;
         };
-        let mut touched = false;
-        for entry in entries.iter_mut() {
+        let mut emptied_by_us = vec![false; entries.len()];
+        for (i, entry) in entries.iter_mut().enumerate() {
             if let Some(Value::Array(handlers)) = entry.get_mut("hooks") {
                 let before = handlers.len();
                 handlers.retain(|h| !h["command"].as_str().is_some_and(is_ours));
-                touched |= handlers.len() != before;
+                emptied_by_us[i] = handlers.len() != before && handlers.is_empty();
             }
         }
-        if touched {
-            entries.retain(|e| e["hooks"].as_array().is_none_or(|h| !h.is_empty()));
+        if emptied_by_us.contains(&true) {
+            let mut flags = emptied_by_us.into_iter();
+            entries.retain(|_| !flags.next().unwrap_or(false));
             if entries.is_empty() {
                 hooks.shift_remove(&event);
             }
@@ -140,13 +142,26 @@ fn remove_ours(settings: &mut Map<String, Value>) {
     }
 }
 
+/// Écrit un fichier sans jamais le laisser à moitié écrit. Un lien symbolique est suivi (on écrit
+/// la cible, le lien reste un lien) et les droits du fichier d'origine sont conservés (un
+/// `settings.json` en 0600 reste en 0600).
 fn write_atomically(path: &Path, text: &str) -> Result<(), String> {
-    if let Some(dir) = path.parent() {
+    let real = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    if let Some(dir) = real.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("{} : {e}", dir.display()))?;
     }
-    let tmp = path.with_extension("kairos-tmp");
+    let name = real
+        .file_name()
+        .map_or_else(String::new, |n| n.to_string_lossy().to_string());
+    let tmp = real.with_file_name(format!(".{name}.kairos-tmp{}", std::process::id()));
     std::fs::write(&tmp, text).map_err(|e| format!("{} : {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path).map_err(|e| format!("{} : {e}", path.display()))
+    if let Ok(meta) = std::fs::metadata(&real) {
+        let _ = std::fs::set_permissions(&tmp, meta.permissions());
+    }
+    std::fs::rename(&tmp, &real).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("{} : {e}", real.display())
+    })
 }
 
 fn execute(action: &HooksAction) -> Result<String, String> {
@@ -154,8 +169,10 @@ fn execute(action: &HooksAction) -> Result<String, String> {
     let settings_path = dir.join("settings.json");
     let command_path = dir.join("commands/kairos.md");
     let existing = read_settings(&settings_path)?;
+    // Un fichier est celui de Kairos s'il porte le repère, quelle que soit sa version : une
+    // version future de Kairos pourra donc le mettre à jour.
     let command_state = match std::fs::read_to_string(&command_path) {
-        Ok(text) if text == COMMAND_FILE => CommandFile::Ours,
+        Ok(text) if text.contains(COMMAND_MARKER) => CommandFile::Ours,
         Ok(_) => CommandFile::Other,
         Err(_) => CommandFile::Absent,
     };
