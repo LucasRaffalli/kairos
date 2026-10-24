@@ -10,6 +10,10 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-24-etape-2a-chrono-design.md`
 
+## Écart avec le spec
+
+`Snapshot` porte aussi `home` (le dossier personnel, lu côté Rust) : l'interface ne le connaît pas, et `describeLaunch` en a besoin pour écrire `~/…`.
+
 ## Global Constraints
 
 - Les règles métier restent dans `kairos-core` : le pont et l'interface n'en dupliquent aucune (ils affichent les refus du cœur tels quels, en français).
@@ -203,7 +207,7 @@
 
 - Modify: `README.md`, page Notion « Kairos » / « Utiliser Kairos » (via le connecteur Notion), `src-tauri/src/tray.rs` (glyphes d'état, si l'essai en révèle l'écart)
 
-- [ ] **Step 1: Comparaison visuelle** : lancer `npm run start` ; dans le navigateur intégré, ouvrir `http://localhost:1420/?scenario=<…>` à 340 px de large pour `idle`, `running`, `paused`, `switching`, `error-locked`, `no-id`, `long-names`, `no-recent`, `claude-launched`, dans les thèmes Sombre et Clair ; comparer avec les captures Figma `220:81`, `220:179`, `223:304`, `223:399`, `230:506`, `226:654` (clair) ; corriger chaque écart de structure, d'espacement, de couleur, de typographie ou de texte ; relever les glyphes de la barre de menus sur les maquettes `231:115` et `231:140` et alignés sur les états repos, en cours, pause.
+- [ ] **Step 1: Comparaison visuelle** : lancer `npm run start` ; dans le navigateur intégré, ouvrir `http://localhost:1420/?scenario=<…>` à 340 px de large pour `idle`, `running`, `paused`, `switching`, `error-locked`, `no-id`, `long-names`, `no-recent`, `claude-launched`, dans les thèmes Sombre et Clair ; comparer avec les captures Figma `220:81`, `220:179`, `223:304`, `223:399`, `230:506`, `226:654` (clair) ; corriger chaque écart de structure, d'espacement, de couleur, de typographie ou de texte ; relever les glyphes de la barre de menus sur les maquettes `231:115` et `231:140` et en déduire ceux des états repos, en cours et pause.
 - [ ] **Step 2: Essai réel dans l'app** : `npm run dev`. Vérifier : `kairos start --parent 111` dans un terminal apparaît dans le popover en moins de 2 s avec « Lancé à … · <dossier> » ; lancer depuis le popover puis `kairos status` ; Pause, Reprendre, Arrêter, Changer de lot, Reprendre une pastille ; le popover **ne se ferme sur aucune action** ; l'icône affiche la durée sans secondes ; ⌘Q avec un lot en cours ouvre le dialogue, et « garder le chrono » laisse le lot ouvert ; verrouiller la base (`sqlite3 … 'BEGIN IMMEDIATE'`) → bandeau et Réessayer ; relancer l'app : une seule instance.
 - [ ] **Step 3: Contrôle automatique** — Run: `cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace && npm run verify && npx prettier --check .` ; Expected: tout vert (le contrôle « aucune action ne ferme le popover » de `popover.cjs` en fait partie).
 - [ ] **Step 4: Documentation** : README (section sur l'app : ce que montre le popover, raccourcis, « aucune action ne ferme le popover », ce qui arrive en 2b à 2d) ; page Notion « Utiliser Kairos » mise à jour avec ce qui est livré.
