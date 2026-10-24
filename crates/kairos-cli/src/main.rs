@@ -197,11 +197,8 @@ fn execute(k: &Kairos<AppClock>, command: Command) -> Result<(Outcome, Offsets)>
         Command::Recent { limit } => Outcome::Recent(k.recent_lots(limit)?),
         Command::Back => Outcome::Switched(k.back(Source::Manual)?),
         Command::Label { id, name } => {
-            k.set_label(&id, &name)?;
-            Outcome::Label {
-                parent: id,
-                label: name,
-            }
+            let label = k.set_label(&id, &name)?;
+            Outcome::Label { parent: id, label }
         }
         Command::Config { key, value } => {
             if let Some(value) = &value {

@@ -390,7 +390,7 @@ impl<C: Clock> Kairos<C> {
                 "SELECT lot_id, MAX(COALESCE(end_at, ?2)) AS last_end FROM entries WHERE removed = 0 AND COALESCE(end_at, ?2) >= ?1 GROUP BY lot_id ORDER BY last_end DESC, MAX(id) DESC LIMIT ?3",
             )?;
             let rows: Vec<(i64, i64)> = stmt
-                .query_map(params![since, ctx.now, limit as i64], |r| {
+                .query_map(params![since, ctx.now, i64::try_from(limit).unwrap_or(i64::MAX)], |r| {
                     Ok((r.get(0)?, r.get(1)?))
                 })?
                 .collect::<rusqlite::Result<_>>()?;
@@ -441,8 +441,9 @@ impl<C: Clock> Kairos<C> {
         self.switch_to(target)
     }
 
-    /// Pose ou remplace le libellé d'un parent connu.
-    pub fn set_label(&self, parent_monday_id: &str, label: &str) -> Result<()> {
+    /// Pose ou remplace le libellé d'un parent connu ; rend le libellé tel qu'il est enregistré
+    /// (espaces retirés).
+    pub fn set_label(&self, parent_monday_id: &str, label: &str) -> Result<String> {
         self.with_tx(|ctx| {
             let id = clean_monday_id(&Some(parent_monday_id.to_string()))?
                 .ok_or_else(|| Error::InvalidMondayId(parent_monday_id.to_string()))?;
@@ -455,7 +456,7 @@ impl<C: Clock> Kairos<C> {
             if changed == 0 {
                 return Err(Error::ParentNotFound(id));
             }
-            Ok(())
+            Ok(label)
         })
     }
 

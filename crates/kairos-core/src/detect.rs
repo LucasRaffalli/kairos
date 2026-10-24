@@ -26,25 +26,42 @@ pub struct FoundId {
     pub sure_by_shape: bool,
 }
 
-/// Tous les IDs Monday d'un texte, dans l'ordre d'apparition, sans doublon, au plus [`MAX_IDS`].
-pub fn extract_ids(text: &str) -> Vec<FoundId> {
-    let mut found: Vec<(usize, FoundId)> = Vec::new();
-    let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-    let mut add =
-        |at: usize, id: &str, sure: bool, found: &mut Vec<(usize, FoundId)>| match index.get(id) {
-            Some(&i) => found[i].1.sure_by_shape |= sure,
-            None if index.len() < MAX_IDS => {
-                index.insert(id.to_string(), found.len());
-                found.push((
+/// Les IDs trouvés, dédoublonnés, au plus [`MAX_IDS`] distincts.
+#[derive(Default)]
+struct Collector {
+    /// (position dans le texte, ID)
+    found: Vec<(usize, FoundId)>,
+    index: std::collections::HashMap<String, usize>,
+}
+
+impl Collector {
+    fn add(&mut self, at: usize, id: &str, sure_by_shape: bool) {
+        match self.index.get(id) {
+            Some(&i) => self.found[i].1.sure_by_shape |= sure_by_shape,
+            None if self.index.len() < MAX_IDS => {
+                self.index.insert(id.to_string(), self.found.len());
+                self.found.push((
                     at,
                     FoundId {
                         id: id.to_string(),
-                        sure_by_shape: sure,
+                        sure_by_shape,
                     },
                 ));
             }
             None => {}
-        };
+        }
+    }
+
+    /// Dans l'ordre d'apparition.
+    fn into_ids(mut self) -> Vec<FoundId> {
+        self.found.sort_by_key(|(at, _)| *at);
+        self.found.into_iter().map(|(_, f)| f).collect()
+    }
+}
+
+/// Tous les IDs Monday d'un texte, dans l'ordre d'apparition, sans doublon, au plus [`MAX_IDS`].
+pub fn extract_ids(text: &str) -> Vec<FoundId> {
+    let mut collector = Collector::default();
     let mut link_spans: Vec<(usize, usize)> = Vec::new();
 
     // Les liens d'abord : on n'y lit que l'ID de l'élément, jamais l'ID du tableau ou de la vue.
@@ -69,7 +86,7 @@ pub fn extract_ids(text: &str) -> Vec<FoundId> {
                                 .take_while(char::is_ascii_digit)
                                 .collect();
                             if valid_shape(&digits) {
-                                add(from + digits_at.min(token.len()), &digits, true, &mut found);
+                                collector.add(from + digits_at.min(token.len()), &digits, true);
                             }
                             search = digits_at;
                         }
@@ -110,11 +127,10 @@ pub fn extract_ids(text: &str) -> Vec<FoundId> {
                     .all(|c| c.is_whitespace() && c != '\n' || matches!(c, ',' | ';' | '&' | '+'))
             });
         previous_marked_end = marked.then_some(i);
-        add(from, digits, marked, &mut found);
+        collector.add(from, digits, marked);
     }
 
-    found.sort_by_key(|(at, _)| *at);
-    found.into_iter().map(|(_, f)| f).collect()
+    collector.into_ids()
 }
 
 fn valid_shape(digits: &str) -> bool {
@@ -245,14 +261,14 @@ pub fn decide(input: &DecideInput) -> Decision {
 
     if !input.message.is_empty() {
         if input.message.len() > 1 {
-            return doubt(format!(
+            return doubt(&format!(
                 "le message cite plusieurs tâches ({})",
                 list(&input.message)
             ));
         }
         let found = &input.message[0];
         if !found.sure {
-            return doubt(format!(
+            return doubt(&format!(
                 "le message contient le numéro {}, que Kairos ne reconnaît pas ; ce peut être autre chose qu'un ID Monday",
                 found.parent
             ));
@@ -266,7 +282,7 @@ pub fn decide(input: &DecideInput) -> Decision {
     if !input.branch_or_commits.is_empty() {
         let set = &input.branch_or_commits;
         if input.conflicting_branch_and_commits {
-            return doubt(format!(
+            return doubt(&format!(
                 "la branche et les commits ne pointent pas vers les mêmes tâches (candidats : {})",
                 list(set)
             ));
@@ -275,25 +291,25 @@ pub fn decide(input: &DecideInput) -> Decision {
             if set.iter().any(|r| r.parent == run) {
                 return Decision::Nothing;
             }
-            return doubt(format!(
+            return doubt(&format!(
                 "Kairos suit {run}, mais la branche et les commits concernent {}",
                 list(set)
             ));
         }
         if busy {
-            return doubt(format!(
+            return doubt(&format!(
                 "Kairos suit un lot sans ID Monday, mais la branche et les commits concernent {}",
                 list(set)
             ));
         }
         if set.len() > 1 {
-            return doubt(format!(
+            return doubt(&format!(
                 "la branche et les commits concernent plusieurs tâches ({})",
                 list(set)
             ));
         }
         if !set[0].sure {
-            return doubt(format!(
+            return doubt(&format!(
                 "la branche ou les commits contiennent le numéro {}, que Kairos ne reconnaît pas ; ce peut être autre chose qu'un ID Monday",
                 set[0].parent
             ));
@@ -304,11 +320,11 @@ pub fn decide(input: &DecideInput) -> Decision {
     if let Some(config) = &input.config {
         return match running {
             Some(run) if run == config.parent => Decision::Nothing,
-            Some(run) => doubt(format!(
+            Some(run) => doubt(&format!(
                 "Kairos suit {run}, mais .kairos.json indique {}",
                 config.describe()
             )),
-            None if busy => doubt(format!(
+            None if busy => doubt(&format!(
                 "Kairos suit un lot sans ID Monday, mais .kairos.json indique {}",
                 config.describe()
             )),
@@ -342,7 +358,7 @@ fn list(found: &[Resolved]) -> String {
         .join(", ")
 }
 
-fn doubt(why: String) -> Decision {
+fn doubt(why: &str) -> Decision {
     Decision::Doubt(format!(
         "Doute : {why}. Demande à l'utilisateur quelle tâche est la bonne avant d'appeler `start` ou `switch`. Ne devine pas."
     ))

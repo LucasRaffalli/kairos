@@ -391,10 +391,10 @@ fn dispatch<C: Clock>(
         }
         "set_label" => {
             let p: SetLabelParams = parse(args)?;
-            k.set_label(&p.parent, &p.label)?;
+            let label = k.set_label(&p.parent, &p.label)?;
             Outcome::Label {
                 parent: p.parent,
-                label: p.label,
+                label,
             }
         }
         "set_subtask_id" => {

@@ -52,18 +52,32 @@ fn program() -> Result<String, String> {
     Ok(exe.to_string_lossy().to_string())
 }
 
-fn hook_command(program: &str, arg: &str) -> String {
-    format!("\"{program}\" hook {arg}")
+/// Le programme entre guillemets simples : le shell n'y interprète rien (ni `$`, ni guillemet
+/// inversé, ni espace).
+fn shell_quote(program: &str) -> String {
+    format!("'{}'", program.replace('\'', "'\\''"))
 }
 
-/// Cette commande est-elle un hook de Kairos ? (`… kairos" hook session-start` ou `user-prompt`)
+/// L'inverse de [`shell_quote`]. Reconnaît aussi l'ancienne forme, entre guillemets doubles.
+fn shell_unquote(token: &str) -> String {
+    match token.strip_prefix('\'').and_then(|t| t.strip_suffix('\'')) {
+        Some(inner) => inner.replace("'\\''", "'"),
+        None => token.trim_matches('"').to_string(),
+    }
+}
+
+fn hook_command(program: &str, arg: &str) -> String {
+    format!("{} hook {arg}", shell_quote(program))
+}
+
+/// Cette commande est-elle un hook de Kairos ? (`'…/kairos' hook session-start` ou `user-prompt`)
 fn is_ours(command: &str) -> bool {
     EVENTS.iter().any(|(_, arg)| {
         command
             .strip_suffix(&format!(" hook {arg}"))
             .is_some_and(|program| {
-                let program = program.trim().trim_matches('"');
-                Path::new(program)
+                let program = shell_unquote(program.trim());
+                Path::new(&program)
                     .file_name()
                     .is_some_and(|n| n == "kairos")
             })
@@ -164,121 +178,222 @@ fn write_atomically(path: &Path, text: &str) -> Result<(), String> {
     })
 }
 
-fn execute(action: &HooksAction) -> Result<String, String> {
-    let dir = config_dir()?;
-    let settings_path = dir.join("settings.json");
-    let command_path = dir.join("commands/kairos.md");
-    let existing = read_settings(&settings_path)?;
-    // Un fichier est celui de Kairos s'il porte le repère, quelle que soit sa version : une
-    // version future de Kairos pourra donc le mettre à jour.
-    let command_state = match std::fs::read_to_string(&command_path) {
-        Ok(text) if text.contains(COMMAND_MARKER) => CommandFile::Ours,
-        Ok(_) => CommandFile::Other,
-        Err(_) => CommandFile::Absent,
-    };
+/// Les fichiers de Claude Code que Kairos touche.
+struct Paths {
+    dir: PathBuf,
+    settings: PathBuf,
+    command: PathBuf,
+}
 
-    match action {
-        HooksAction::Install { dry_run } => {
-            if command_state == CommandFile::Other {
-                return Err(format!(
-                    "{} existe déjà et n'est pas celui de Kairos : déplace-le ou renomme-le, puis relance. Rien n'a été modifié.",
-                    command_path.display()
-                ));
-            }
-            let program = program()?;
-            let mut settings = existing.clone().unwrap_or_default();
-            remove_ours(&mut settings);
-            let hooks = settings
-                .entry("hooks")
-                .or_insert_with(|| Value::Object(Map::new()))
-                .as_object_mut()
-                .expect("vérifié à la lecture");
-            for (event, arg) in EVENTS {
-                let handler = json!({
-                    "type": "command",
-                    "command": hook_command(&program, arg),
-                    "timeout": HOOK_TIMEOUT,
-                });
-                hooks
-                    .entry(event)
-                    .or_insert_with(|| Value::Array(vec![]))
-                    .as_array_mut()
-                    .expect("vérifié à la lecture")
-                    .push(json!({ "hooks": [handler] }));
-            }
-            if *dry_run {
-                return Ok(format!(
-                    "Essai à blanc, rien n'est écrit. Kairos ajouterait ses hooks SessionStart et UserPromptSubmit dans {} (commande : {program}){}.",
-                    settings_path.display(),
-                    if command_state == CommandFile::Absent {
-                        format!(", et créerait {}", command_path.display())
-                    } else {
-                        String::new()
-                    }
-                ));
-            }
-            let mut report = Vec::new();
-            if existing.is_some() {
-                let stamp = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map_or(0, |d| d.as_secs());
-                let backup = dir.join(format!("settings.json.kairos-backup-{stamp}"));
-                std::fs::copy(&settings_path, &backup)
-                    .map_err(|e| format!("sauvegarde impossible ({}) : {e}", backup.display()))?;
-                report.push(format!("sauvegarde : {}", backup.display()));
-            }
-            let text = serde_json::to_string_pretty(&Value::Object(settings))
-                .map_err(|e| e.to_string())?;
-            write_atomically(&settings_path, &(text + "\n"))?;
-            write_atomically(&command_path, COMMAND_FILE)?;
-            Ok(format!(
-                "✓ Hooks Kairos installés dans {} et commande /kairos créée{}.\nRedémarre Claude Code pour qu'il les prenne en compte.",
-                settings_path.display(),
-                if report.is_empty() { String::new() } else { format!(" ({})", report.join(", ")) }
-            ))
+impl Paths {
+    fn locate() -> Result<Paths, String> {
+        let dir = config_dir()?;
+        Ok(Paths {
+            settings: dir.join("settings.json"),
+            command: dir.join("commands/kairos.md"),
+            dir,
+        })
+    }
+
+    /// Un chemin de sauvegarde qui n'existe pas encore (deux installations dans la même seconde
+    /// ne s'écrasent pas).
+    fn backup(&self) -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let base = format!("settings.json.kairos-backup-{stamp}");
+        let mut candidate = self.dir.join(&base);
+        let mut n = 2;
+        while candidate.exists() {
+            candidate = self.dir.join(format!("{base}-{n}"));
+            n += 1;
         }
-        HooksAction::Uninstall => {
-            let mut notes = Vec::new();
-            if let Some(mut settings) = existing {
-                let before = settings.clone();
-                remove_ours(&mut settings);
-                if settings != before {
-                    let text = serde_json::to_string_pretty(&Value::Object(settings))
-                        .map_err(|e| e.to_string())?;
-                    write_atomically(&settings_path, &(text + "\n"))?;
-                    notes.push("hooks retirés");
-                }
-            }
-            match command_state {
-                CommandFile::Ours => {
-                    std::fs::remove_file(&command_path)
-                        .map_err(|e| format!("{} : {e}", command_path.display()))?;
-                    notes.push("commande /kairos retirée");
-                }
-                CommandFile::Other => {
-                    notes.push("commande /kairos laissée (ce n'est plus le fichier de Kairos)");
-                }
-                CommandFile::Absent => {}
-            }
-            Ok(if notes.is_empty() {
-                "Rien à retirer : aucun hook de Kairos.".to_string()
-            } else {
-                format!("✓ {}.", notes.join(", "))
-            })
+        candidate
+    }
+}
+
+/// Où en est `commands/kairos.md`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CommandFile {
+    Absent,
+    /// Celui de Kairos, à jour.
+    Current,
+    /// Celui de Kairos, d'une version plus ancienne (reconnu à son repère).
+    Outdated,
+    /// Un fichier qui n'est pas celui de Kairos.
+    Other,
+}
+
+impl CommandFile {
+    fn inspect(path: &Path) -> CommandFile {
+        match std::fs::read_to_string(path) {
+            Ok(text) if text == COMMAND_FILE => CommandFile::Current,
+            Ok(text) if text.contains(COMMAND_MARKER) => CommandFile::Outdated,
+            Ok(_) => CommandFile::Other,
+            Err(_) => CommandFile::Absent,
         }
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum CommandFile {
-    Absent,
-    Ours,
-    Other,
+fn execute(action: &HooksAction) -> Result<String, String> {
+    let paths = Paths::locate()?;
+    let settings = read_settings(&paths.settings)?;
+    let command_file = CommandFile::inspect(&paths.command);
+    match action {
+        HooksAction::Install { dry_run } => {
+            install(&paths, settings.as_ref(), command_file, *dry_run)
+        }
+        HooksAction::Uninstall => uninstall(&paths, settings, command_file),
+    }
+}
+
+/// Les réglages avec les hooks de Kairos en plus (les nôtres d'avant sont remplacés).
+fn with_our_hooks(existing: Option<&Map<String, Value>>, program: &str) -> Map<String, Value> {
+    let mut settings = existing.cloned().unwrap_or_default();
+    remove_ours(&mut settings);
+    let hooks = settings
+        .entry("hooks")
+        .or_insert_with(|| Value::Object(Map::new()))
+        .as_object_mut()
+        .expect("vérifié à la lecture");
+    for (event, arg) in EVENTS {
+        let handler = json!({
+            "type": "command",
+            "command": hook_command(program, arg),
+            "timeout": HOOK_TIMEOUT,
+        });
+        hooks
+            .entry(event)
+            .or_insert_with(|| Value::Array(vec![]))
+            .as_array_mut()
+            .expect("vérifié à la lecture")
+            .push(json!({ "hooks": [handler] }));
+    }
+    settings
+}
+
+fn to_text(settings: Map<String, Value>) -> Result<String, String> {
+    serde_json::to_string_pretty(&Value::Object(settings))
+        .map(|text| text + "\n")
+        .map_err(|e| e.to_string())
+}
+
+fn install(
+    paths: &Paths,
+    existing: Option<&Map<String, Value>>,
+    command_file: CommandFile,
+    dry_run: bool,
+) -> Result<String, String> {
+    if command_file == CommandFile::Other {
+        return Err(format!(
+            "{} existe déjà et n'est pas celui de Kairos : déplace-le ou renomme-le, puis relance. Rien n'a été modifié.",
+            paths.command.display()
+        ));
+    }
+    let program = program()?;
+    let updated = with_our_hooks(existing, &program);
+    let settings_unchanged = existing == Some(&updated);
+    if settings_unchanged && command_file == CommandFile::Current {
+        return Ok(format!(
+            "Déjà installé : les hooks Kairos sont dans {} (commande : {program}).",
+            paths.settings.display()
+        ));
+    }
+    if dry_run {
+        let creates = if command_file == CommandFile::Absent {
+            format!(", et créerait {}", paths.command.display())
+        } else {
+            String::new()
+        };
+        return Ok(format!(
+            "Essai à blanc, rien n'est écrit. Kairos ajouterait ses hooks SessionStart et UserPromptSubmit dans {} (commande : {program}){creates}.",
+            paths.settings.display()
+        ));
+    }
+
+    let mut backup_note = String::new();
+    if existing.is_some() && !settings_unchanged {
+        let backup = paths.backup();
+        std::fs::copy(&paths.settings, &backup)
+            .map_err(|e| format!("sauvegarde impossible ({}) : {e}", backup.display()))?;
+        backup_note = format!(" (sauvegarde : {})", backup.display());
+    }
+    if !settings_unchanged {
+        write_atomically(&paths.settings, &to_text(updated)?)?;
+    }
+    write_atomically(&paths.command, COMMAND_FILE)?;
+    Ok(format!(
+        "✓ Hooks Kairos installés dans {} et commande /kairos créée{backup_note}.\nRedémarre Claude Code pour qu'il les prenne en compte.",
+        paths.settings.display()
+    ))
+}
+
+fn uninstall(
+    paths: &Paths,
+    existing: Option<Map<String, Value>>,
+    command_file: CommandFile,
+) -> Result<String, String> {
+    let mut done = Vec::new();
+    if let Some(settings) = existing {
+        let mut cleaned = settings.clone();
+        remove_ours(&mut cleaned);
+        if cleaned != settings {
+            write_atomically(&paths.settings, &to_text(cleaned)?)?;
+            done.push("hooks retirés");
+        }
+    }
+    match command_file {
+        CommandFile::Current | CommandFile::Outdated => {
+            std::fs::remove_file(&paths.command)
+                .map_err(|e| format!("{} : {e}", paths.command.display()))?;
+            done.push("commande /kairos retirée");
+        }
+        CommandFile::Other => {
+            done.push("commande /kairos laissée (ce n'est pas le fichier de Kairos)");
+        }
+        CommandFile::Absent => {}
+    }
+    Ok(if done.is_empty() {
+        "Rien à retirer : aucun hook de Kairos.".to_string()
+    } else {
+        format!("✓ {}.", done.join(", "))
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_program_path_survives_the_shell_whatever_it_contains() {
+        for program in [
+            "/Applications/Kairos.app/Contents/MacOS/kairos",
+            "/tmp/un dossier/kairos",
+            "/tmp/$HOME/`id`/kairos",
+            "/tmp/guillemet\"/et'apostrophe/kairos",
+            "/tmp/\\retour/kairos",
+        ] {
+            let command = hook_command(program, "user-prompt");
+            // Le shell doit rendre le chemin tel quel, sans rien interpréter.
+            let echoed = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(format!(
+                    "printf %s {}",
+                    command.strip_suffix(" hook user-prompt").unwrap()
+                ))
+                .output()
+                .unwrap();
+            assert_eq!(String::from_utf8_lossy(&echoed.stdout), program);
+            assert!(is_ours(&command), "{command}");
+        }
+    }
+
+    #[test]
+    fn hooks_written_by_an_earlier_version_are_still_recognised() {
+        assert!(is_ours(
+            "\"/Applications/Kairos.app/Contents/MacOS/kairos\" hook session-start"
+        ));
+    }
 
     #[test]
     fn only_kairos_hook_commands_are_ours() {

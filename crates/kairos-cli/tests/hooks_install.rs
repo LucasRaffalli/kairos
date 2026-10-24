@@ -53,6 +53,11 @@ impl Home {
     }
 }
 
+/// Le programme entre guillemets simples, comme `kairos hooks install` l'écrit.
+fn quoted(path: &str) -> String {
+    format!("'{}'", path.replace('\'', "'\\''"))
+}
+
 fn exe() -> String {
     std::fs::canonicalize(env!("CARGO_BIN_EXE_kairos"))
         .unwrap()
@@ -95,11 +100,11 @@ fn install_creates_settings_and_command_when_absent() {
     let settings = h.read_settings();
     assert_eq!(
         ours(&settings, "SessionStart"),
-        [format!("\"{}\" hook session-start", exe())]
+        [format!("{} hook session-start", quoted(&exe()))]
     );
     assert_eq!(
         ours(&settings, "UserPromptSubmit"),
-        [format!("\"{}\" hook user-prompt", exe())]
+        [format!("{} hook user-prompt", quoted(&exe()))]
     );
     let handler = &settings["hooks"]["UserPromptSubmit"][0]["hooks"][0];
     assert_eq!(handler["type"], "command");
@@ -171,7 +176,7 @@ fn install_twice_does_not_duplicate_and_updates_the_program_path() {
     let settings = h.read_settings();
     assert_eq!(
         ours(&settings, "SessionStart"),
-        [format!("\"{}\" hook session-start", exe())]
+        [format!("{} hook session-start", quoted(&exe()))]
     );
     assert_eq!(ours(&settings, "UserPromptSubmit").len(), 1);
 }
@@ -361,4 +366,39 @@ fn uninstall_keeps_an_empty_entry_the_user_had_before() {
         h.read_settings()["hooks"]["UserPromptSubmit"],
         json!([{ "hooks": [] }])
     );
+}
+
+#[test]
+fn installing_again_changes_nothing_and_keeps_every_backup_distinct() {
+    let h = Home::new();
+    std::fs::write(h.settings(), r#"{"model":"opus"}"#).unwrap();
+    assert_eq!(code(&h.run(&["hooks", "install"])), Some(0));
+    assert_eq!(h.backups().len(), 1);
+    // Déjà installé : rien à écrire, pas de nouvelle sauvegarde.
+    let again = h.run(&["hooks", "install"]);
+    assert_eq!(code(&again), Some(0));
+    assert!(
+        stdout(&again).contains("Déjà installé"),
+        "{}",
+        stdout(&again)
+    );
+    assert_eq!(h.backups().len(), 1);
+    // Deux modifications dans la même seconde : deux sauvegardes, aucune écrasée.
+    for extra in ["un", "deux"] {
+        let mut settings = h.read_settings();
+        settings[extra] = json!(true);
+        std::fs::write(h.settings(), settings.to_string()).unwrap();
+        // Le hook est déjà là : la sauvegarde ne se fait que si l'installation change quelque chose.
+        let mut settings = h.read_settings();
+        settings["hooks"]["SessionStart"] = json!([]);
+        std::fs::write(h.settings(), settings.to_string()).unwrap();
+        assert_eq!(code(&h.run(&["hooks", "install"])), Some(0));
+    }
+    let backups = h.backups();
+    assert_eq!(backups.len(), 3, "{backups:?}");
+    let distinct: std::collections::HashSet<String> = backups
+        .iter()
+        .map(|b| std::fs::read_to_string(b).unwrap())
+        .collect();
+    assert_eq!(distinct.len(), 3, "chaque sauvegarde garde son contenu");
 }

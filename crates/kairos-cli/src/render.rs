@@ -4,7 +4,7 @@ use kairos_core::model::{
     Day, DayStatus, DayView, Entry, RecentLot, StartedLot, Status, StoppedEntry, SwitchResult,
 };
 use kairos_core::report::Report;
-use kairos_core::timeline::format_duration;
+use kairos_core::timeline::{format_duration, local_date};
 use serde_json::{json, Value};
 
 pub enum Outcome {
@@ -171,11 +171,20 @@ pub fn text(outcome: &Outcome, offset: &dyn Fn(i64) -> i32) -> String {
                     Some(label) => format!("{label} — {}", r.lot.describe()),
                     None => r.lot.describe(),
                 };
+                // Sans temps aujourd'hui, le lot a fini un autre jour : on le dit.
+                let end = if r.today_total == 0 {
+                    format!(
+                        "{} {}",
+                        local_date(r.last_end, offset),
+                        hm(r.last_end, offset)
+                    )
+                } else {
+                    hm(r.last_end, offset)
+                };
                 format!(
-                    "{} {name} · {} aujourd'hui · fin {}",
+                    "{} {name} · {} aujourd'hui · fin {end}",
                     if r.current { "▶" } else { " " },
                     format_duration(r.today_total),
-                    hm(r.last_end, offset)
                 )
             })
             .collect::<Vec<_>>()

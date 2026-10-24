@@ -611,3 +611,21 @@ fn a_kairos_json_with_a_hostile_label_is_ignored_and_never_reaches_claude() {
     assert!(h.silent(), "{}", h.stdout);
     assert_eq!(e.status(NOW)["state"], "idle");
 }
+
+#[test]
+fn a_doubt_that_changed_in_between_is_asked_again() {
+    let e = Env::new();
+    e.autonomy("auto");
+    let first = format!("entre ticket {A} et ticket {B}");
+    let second = format!("entre ticket {A} et ticket {C}");
+    assert!(!e.prompt("s1", &first).silent());
+    assert!(
+        e.prompt("s1", &first).silent(),
+        "le même doute, de suite : une seule fois"
+    );
+    assert!(!e.prompt("s1", &second).silent());
+    assert!(
+        !e.prompt("s1", &first).silent(),
+        "A, B, puis A : le doute a changé entre-temps"
+    );
+}

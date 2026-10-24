@@ -120,7 +120,7 @@ fn user_prompt<C: Clock>(k: &Kairos<C>, input: &input::HookInput) -> Result<Repl
 
     Ok(match detect::decide(&decide_input) {
         Decision::Nothing => Reply::default(),
-        Decision::Doubt(text) => once(input, &text, text.clone()),
+        Decision::Doubt(text) => once_unless_changed(input, "doubt", text),
         Decision::Inform(plan) => {
             let text = inform_text(&plan);
             let key = format!("inform:{}:{:?}", plan.parent, decide_input.running_parent);
@@ -142,16 +142,30 @@ fn user_prompt<C: Clock>(k: &Kairos<C>, input: &input::HookInput) -> Result<Repl
     })
 }
 
+fn tell_claude(text: String) -> Reply {
+    Reply {
+        context: Some(text),
+        message: None,
+    }
+}
+
 /// Le texte `text` pour Claude, une seule fois par session pour cette `key`.
 fn once(input: &input::HookInput, key: &str, text: String) -> Reply {
     if state::already_asked(&input.session_id, key) {
         return Reply::default();
     }
     state::mark_asked(&input.session_id, key);
-    Reply {
-        context: Some(text),
-        message: None,
+    tell_claude(text)
+}
+
+/// Le texte `text` pour Claude, sauf s'il vient d'être dit (ce même texte comme dernière réponse
+/// de ce `topic`) : un doute qui change est reposé, le même doute ne l'est pas à chaque message.
+fn once_unless_changed(input: &input::HookInput, topic: &str, text: String) -> Reply {
+    if state::is_latest(&input.session_id, topic, &text) {
+        return Reply::default();
     }
+    state::mark_latest(&input.session_id, topic, &text);
+    tell_claude(text)
 }
 
 fn read_workspace<C: Clock>(k: &Kairos<C>, cwd: &Path, decide_input: &mut DecideInput) {
@@ -301,10 +315,10 @@ fn act<C: Clock>(k: &Kairos<C>, input: &input::HookInput, plan: &Plan) -> Reply 
         && !state::already_asked(&input.session_id, &hint_key)
     {
         state::mark_asked(&input.session_id, &hint_key);
-        context.push_str(&format!(
-            " Lot lancé sans nom : si tu connais le nom de la tâche, enregistre-le avec `set_label` (parent {}).",
+        context = format!(
+            "{context} Lot lancé sans nom : si tu connais le nom de la tâche, enregistre-le avec `set_label` (parent {}).",
             plan.parent
-        ));
+        );
     }
     Reply {
         context: Some(context),
