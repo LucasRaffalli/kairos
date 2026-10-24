@@ -128,7 +128,10 @@ fn execute(k: &Kairos<AppClock>, command: Command) -> Result<(Outcome, Offsets)>
             subtask: a.subtask,
             subtask_monday_id: a.subtask_id,
             source: a.source.into(),
-            workdir: None,
+            // Le dossier courant du processus : ce que la ligne de commande sait de l'extérieur.
+            workdir: std::env::current_dir()
+                .ok()
+                .map(|dir| dir.to_string_lossy().into_owned()),
         })
     };
 

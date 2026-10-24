@@ -281,6 +281,11 @@ fn act<C: Clock>(k: &Kairos<C>, input: &input::HookInput, plan: &Plan) -> Reply 
         parent_label: plan.label.clone(),
         subtask: plan.subtask.clone(),
         source: Source::ClaudeCode,
+        // Le dossier que Claude Code envoie dans l'événement.
+        workdir: input
+            .cwd
+            .as_deref()
+            .map(|dir| dir.to_string_lossy().into_owned()),
         ..StartArgs::default()
     });
     let switched = match result {

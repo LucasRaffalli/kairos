@@ -629,3 +629,14 @@ fn a_doubt_that_changed_in_between_is_asked_again() {
         "A, B, puis A : le doute a changé entre-temps"
     );
 }
+
+#[test]
+fn auto_records_the_cwd_sent_by_claude_code_as_workdir() {
+    let e = Env::new();
+    e.autonomy("auto");
+    let repo = repo("main", &["init"]);
+    e.prompt_at(NOW, "s1", Some(repo.path()), &format!("ticket {A}"));
+    let status = e.status(NOW);
+    assert_eq!(status["workdir"], repo.path().to_str().unwrap());
+    assert_eq!(status["launched_by"], "claude-code");
+}
