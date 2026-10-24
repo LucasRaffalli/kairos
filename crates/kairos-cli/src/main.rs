@@ -2,6 +2,7 @@
 //! appels de `kairos-core` et rend le résultat en texte ou en JSON.
 
 mod args;
+mod mcp;
 mod render;
 mod time_input;
 
