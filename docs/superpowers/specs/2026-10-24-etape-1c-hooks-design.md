@@ -15,7 +15,7 @@ Hors 1c :
 
 ## Décisions prises
 
-- **Revenir sur un lot précédent sans ID** (« go retourne sur Bundle », « on reprend ») : c'est Claude qui comprend la phrase, pas le hook, et il n'y a aucune phrase préenregistrée. Pour cela, deux nouveaux outils (`recent`, `back`) et une règle : lancer un lot avec un libellé. Voir « Revenir sur un lot précédent ».
+- **Revenir sur un lot précédent sans ID** (« go retourne sur Bundle », « on reprend ») : c'est Claude qui comprend la phrase, pas le hook, et il n'y a aucune phrase préenregistrée. Pour cela, trois nouveaux outils (`recent`, `back`, `set_label`) et une règle : lancer un lot avec un libellé. Voir « Revenir sur un lot précédent ».
 - **Périmètre** : hooks `SessionStart` et `UserPromptSubmit`, détection du lot, installation, commande `/kairos`. Un seul projet.
 - **Autonomie** : le hook suit le réglage `claude_autonomy` (lu à chaque appel, comme le MCP). `auto` : il agit seul quand il est sûr. `ask` (défaut) : il n'agit jamais, il informe Claude. Dans les deux modes, un doute devient une question posée à l'utilisateur.
 - **Installation** : `kairos hooks install`, jamais un copier-coller ; rien ne se modifie sans que la personne lance la commande.
@@ -26,7 +26,7 @@ Hors 1c :
 - `crates/kairos-core/src/detect.rs` : fonctions **pures** (sans entrée-sortie, sans horloge) : extraire les IDs d'un texte, décider. Testées en tableau.
 - `crates/kairos-core/src/service.rs` : `Kairos::resolve_monday_id(id) -> Result<KnownId>`, lecture seule, pour savoir si un ID est un parent connu, une sous-tâche mémorisée, ou inconnu.
 - `crates/kairos-cli/src/hook/` : `input.rs` (lit le JSON de Claude Code), `sources.rs` (branche Git, commits, `.kairos.json`), `output.rs` (le JSON rendu), `mod.rs` (l'enchaînement) et `install.rs`.
-- `Kairos::recent_lots(limit) -> Result<Vec<RecentLot>>` et `Kairos::back() -> Result<SwitchResult>` dans le cœur ; les outils MCP `recent` et `back` (16 outils au total, le test du 1b qui comptait 14 est mis à jour) et les commandes `kairos recent` / `kairos back` les exposent.
+- `Kairos::recent_lots(limit) -> Result<Vec<RecentLot>>` et `Kairos::back() -> Result<SwitchResult>` dans le cœur ; les outils MCP `recent` et `back` (17 outils au total avec `set_label`, le test du 1b qui comptait 14 est mis à jour) et les commandes `kairos recent` / `kairos back` les exposent.
 - `kairos hook <session-start|user-prompt>` et `kairos hooks <install|uninstall>` : deux sous-commandes du binaire existant. Même base, même horloge, même `KAIROS_DB`.
 
 ## La détection du lot
@@ -102,7 +102,8 @@ Le scénario type : Lucas est sur la feature Bundle, une urgence arrive, il donn
 
 - **`recent`** (outil MCP et `kairos recent [--limit N]`, lecture seule) : les lots des 7 derniers jours, au plus 8, du plus récent au plus ancien, un par lot distinct : libellé, ID du parent, sous-tâche, heure de la dernière fin, total du jour, et si c'est le lot en cours. Claude l'appelle quand l'utilisateur parle d'un lot sans donner d'ID, y retrouve le bon, puis appelle `switch` avec son ID. Zéro candidat plausible ou plusieurs : il demande.
 - **`back`** (outil MCP et `kairos back`) : revient au lot juste avant l'actuel (celui de la dernière entrée fermée dont le lot est différent de celui en cours). Rien en cours : reprend le dernier lot fermé. Deux `back` de suite font l'aller-retour entre deux lots. Erreur `no_previous_lot` s'il n'y en a pas. Comme `start` et `switch`, il n'est pas soumis à `claude_autonomy`.
-- **Le libellé** : la règle du `SessionStart` demande à Claude de passer `label` (le nom de la feature en deux ou trois mots) à chaque `start` ou `switch` quand il le connaît, sinon `recent` n'afficherait qu'un numéro.
+- **`set_label`** (outil MCP et `kairos label <ID> <nom>`) : pose ou remplace le libellé d'un parent déjà connu, sans relancer le lot. Erreur `parent_not_found` si l'ID est inconnu, `invalid_name` si le nom est vide, sur plusieurs lignes ou trop long (mêmes limites que le nom d'une tâche). Comme `set_subtask_id`, il n'est pas soumis à `claude_autonomy`.
+- **Le libellé** : la règle du `SessionStart` demande à Claude de passer `label` (le nom de la feature en deux ou trois mots) à chaque `start` ou `switch` quand il le connaît, sinon `recent` n'afficherait qu'un numéro. **Quand le hook lance ou bascule seul**, il ne voit que l'ID : il ajoute alors à Claude « lot lancé sans nom : si tu le connais, enregistre-le avec `set_label` » (une seule fois par parent sans libellé et par session). Le libellé s'affiche dans `recent` et dans les messages du hook (« basculé vers Bundle · 12406850311 »).
 
 **Le temps** : revenir sur un lot ouvre une **nouvelle entrée** sur le même lot ; le temps déjà fait est conservé et le total du jour s'additionne (le rapport du soir regroupe tout sur la même ligne). L'urgence garde le sien.
 
@@ -150,6 +151,7 @@ Les règles de détection se testent sans entrée-sortie ; le reste sur le vrai 
 - **Plusieurs tâches par branche** : les trois cas de la section ci-dessus ; le doute qui ne revient pas ; `hook-state.json` illisible, absent, impossible à écrire.
 - **Sources** : dépôt Git temporaire (branche avec ID, commits écrits de plusieurs façons, tête détachée), `.kairos.json` valide et invalide.
 - **Installation** : dans un faux `HOME` (création, relance sans doublon, conservation des réglages existants, sauvegarde, refus d'un JSON invalide, désinstallation, `--dry-run` qui n'écrit rien).
+- **Libellé** : `set_label` (pose, remplacement, parent inconnu, nom invalide), conservé par un `start` suivant sans libellé, affiché par `recent` ; la consigne du hook n'apparaît qu'une fois.
 - **Retour** : `recent_lots` (ordre, fenêtre de 7 jours, un seul exemplaire par lot, total du jour, lot en cours marqué) ; `back` (aller-retour, rien en cours, aucun précédent, temps additionné sur le même lot) ; les deux outils et les deux commandes sur le vrai binaire.
 - **Bout en bout** : un vrai échange `UserPromptSubmit` en `auto` qui lance puis bascule un lot réel dans la base temporaire.
 
