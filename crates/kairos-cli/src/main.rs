@@ -19,7 +19,7 @@ use serde_json::json;
 
 /// L'horloge du système, ou une horloge figée par `KAIROS_NOW` (secondes) et `KAIROS_TZ_OFFSET`
 /// (secondes) : un crochet de test, lu ici seulement, jamais par le cœur.
-enum AppClock {
+pub(crate) enum AppClock {
     System(SystemClock),
     Fixed(FakeClock),
 }
@@ -40,7 +40,7 @@ impl Clock for AppClock {
     }
 }
 
-fn app_clock() -> AppClock {
+pub(crate) fn app_clock() -> AppClock {
     match std::env::var("KAIROS_NOW")
         .ok()
         .and_then(|v| v.parse::<i64>().ok())
@@ -65,6 +65,9 @@ fn run() -> i32 {
     if matches!(cli.command, Command::Version) {
         println!("kairos {}", kairos_core::version());
         return 0;
+    }
+    if matches!(cli.command, Command::Mcp) {
+        return mcp::server::run();
     }
     let clock = app_clock();
     let outcome =
@@ -191,9 +194,9 @@ fn execute(k: &Kairos<AppClock>, command: Command) -> Result<(Outcome, Offsets)>
             let value = k.config_get(&key)?;
             Outcome::Config { key, value }
         }
-        Command::Version => {
+        Command::Version | Command::Mcp => {
             return Err(Error::Internal(
-                "`version` ne passe pas par le service".into(),
+                "`version` et `mcp` ne passent pas par le service".into(),
             ))
         }
     };
