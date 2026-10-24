@@ -42,6 +42,10 @@ pub enum Error {
     RunningLotOnClose(String),
     EntryNotFound(i64),
     NothingToResume,
+    /// `back` sans lot précédent à reprendre.
+    NoPreviousLot,
+    /// Aucun parent connu avec cet ID Monday.
+    ParentNotFound(String),
     InvalidSetting(String),
     DbNewer,
     DbUnavailable,
@@ -72,6 +76,8 @@ impl Error {
             Error::RunningLotOnClose(_) => "running_lot_on_close",
             Error::EntryNotFound(_) => "entry_not_found",
             Error::NothingToResume => "nothing_to_resume",
+            Error::NoPreviousLot => "no_previous_lot",
+            Error::ParentNotFound(_) => "parent_not_found",
             Error::InvalidSetting(_) => "invalid_setting",
             Error::DbNewer => "db_newer",
             Error::DbUnavailable => "db_unavailable",
@@ -103,6 +109,8 @@ impl fmt::Display for Error {
             Error::RunningLotOnClose(lot) => write!(f, "Un lot est en cours ({lot}) : arrête-le d'abord, ou ajoute --stop pour l'arrêter et clôturer."),
             Error::EntryNotFound(id) => write!(f, "Aucune entrée n°{id} : `kairos today` liste les numéros."),
             Error::NothingToResume => write!(f, "Rien à reprendre : aucune pause en cours."),
+            Error::NoPreviousLot => write!(f, "Aucun lot précédent à reprendre."),
+            Error::ParentNotFound(id) => write!(f, "Aucun parent avec l'ID {id}."),
             Error::InvalidSetting(why) => write!(f, "Réglage invalide : {why}."),
             Error::DbNewer => write!(f, "Cette base a été créée par une version plus récente de Kairos : mets Kairos à jour."),
             Error::DbUnavailable => write!(f, "La base est verrouillée par un autre processus depuis plus de 5 secondes : réessaie dans un instant."),
@@ -188,6 +196,11 @@ mod tests {
             ),
             (Error::EntryNotFound(7), "entry_not_found"),
             (Error::NothingToResume, "nothing_to_resume"),
+            (Error::NoPreviousLot, "no_previous_lot"),
+            (
+                Error::ParentNotFound("12406850311".into()),
+                "parent_not_found",
+            ),
             (
                 Error::InvalidSetting("rounding_minutes = 7".into()),
                 "invalid_setting",

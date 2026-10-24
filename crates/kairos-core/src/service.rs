@@ -7,8 +7,8 @@ use crate::clock::Clock;
 use crate::db::Db;
 use crate::error::{Error, Result};
 use crate::model::{
-    AddEntry, Day, DayStatus, DayView, EditEntry, Entry, EntryView, LotView, StartArgs, StartedLot,
-    Status, StoppedEntry, SwitchResult, Totals,
+    AddEntry, Day, DayStatus, DayView, EditEntry, Entry, EntryView, KnownId, LotView, RecentLot,
+    Source, StartArgs, StartedLot, Status, StoppedEntry, SwitchResult, Totals,
 };
 use crate::report::{self, Report, ReportEntry};
 use crate::timeline::{self, Interval};
@@ -343,6 +343,114 @@ impl<C: Clock> Kairos<C> {
                 "UPDATE subtasks SET monday_item_id = ?1 WHERE id = ?2",
                 params![item, row],
             )?;
+            Ok(())
+        })
+    }
+
+    /// Ce que Kairos sait d'un ID Monday : parent connu, sous-tâche mémorisée, ou rien. Lecture seule.
+    pub fn resolve_monday_id(&self, id: &str) -> Result<KnownId> {
+        self.with_tx(|ctx| {
+            let id = clean_monday_id(&Some(id.to_string()))?
+                .ok_or_else(|| Error::InvalidMondayId(id.to_string()))?;
+            let parent: Option<Option<String>> = ctx
+                .tx
+                .query_row(
+                    "SELECT label FROM parents WHERE monday_id = ?1",
+                    [&id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if let Some(label) = parent {
+                return Ok(KnownId::Parent { label });
+            }
+            let subtask = ctx
+                .tx
+                .query_row(
+                    "SELECT p.monday_id, s.name, p.label FROM subtasks s JOIN parents p ON p.id = s.parent_id WHERE s.monday_item_id = ?1 AND p.monday_id IS NOT NULL",
+                    [&id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .optional()?;
+            Ok(match subtask {
+                Some((parent_monday_id, subtask, label)) => KnownId::Subtask {
+                    parent_monday_id,
+                    subtask,
+                    label,
+                },
+                None => KnownId::Unknown,
+            })
+        })
+    }
+
+    /// Les lots des 7 derniers jours, un par lot, du plus récent au plus ancien.
+    pub fn recent_lots(&self, limit: usize) -> Result<Vec<RecentLot>> {
+        self.with_tx(|ctx| {
+            let since = ctx.now - 7 * 86_400;
+            let mut stmt = ctx.tx.prepare(
+                "SELECT lot_id, MAX(COALESCE(end_at, ?2)) AS last_end FROM entries WHERE removed = 0 AND COALESCE(end_at, ?2) >= ?1 GROUP BY lot_id ORDER BY last_end DESC, MAX(id) DESC LIMIT ?3",
+            )?;
+            let rows: Vec<(i64, i64)> = stmt
+                .query_map(params![since, ctx.now, limit as i64], |r| {
+                    Ok((r.get(0)?, r.get(1)?))
+                })?
+                .collect::<rusqlite::Result<_>>()?;
+            let current = match open_entry(ctx)? {
+                Some((_, lot_id, _)) => Some(lot_id),
+                None => paused_lot(ctx)?,
+            };
+            let today = timeline::local_date(ctx.now, ctx.offset);
+            let mut recent = Vec::new();
+            for (lot_id, last_end) in rows {
+                recent.push(RecentLot {
+                    lot: lot_view(ctx, lot_id)?,
+                    last_end,
+                    today_total: lot_day_total(ctx, lot_id, &today)?,
+                    current: current == Some(lot_id),
+                });
+            }
+            Ok(recent)
+        })
+    }
+
+    /// Revient au lot d'avant : celui de la dernière entrée fermée dont le lot diffère de celui en
+    /// cours ; si rien ne tourne, relance le lot de la dernière entrée fermée.
+    pub fn back(&self, source: Source) -> Result<SwitchResult> {
+        let target = self.with_tx(|ctx| {
+            let running = open_entry(ctx)?.map(|(_, lot_id, _)| lot_id);
+            let lot_id: Option<i64> = ctx
+                .tx
+                .query_row(
+                    "SELECT lot_id FROM entries WHERE removed = 0 AND end_at IS NOT NULL AND (?1 IS NULL OR lot_id <> ?1) ORDER BY end_at DESC, id DESC LIMIT 1",
+                    [running],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            let lot = lot_view(ctx, lot_id.ok_or(Error::NoPreviousLot)?)?;
+            Ok(StartArgs {
+                parent_monday_id: lot.parent_monday_id,
+                name: lot.name,
+                subtask: lot.subtask,
+                source,
+                ..StartArgs::default()
+            })
+        })?;
+        self.switch_to(target)
+    }
+
+    /// Pose ou remplace le libellé d'un parent connu.
+    pub fn set_label(&self, parent_monday_id: &str, label: &str) -> Result<()> {
+        self.with_tx(|ctx| {
+            let id = clean_monday_id(&Some(parent_monday_id.to_string()))?
+                .ok_or_else(|| Error::InvalidMondayId(parent_monday_id.to_string()))?;
+            let label = clean_text(&Some(label.to_string()), "Le libellé")?
+                .ok_or_else(|| Error::InvalidName("le libellé est vide".into()))?;
+            let changed = ctx.tx.execute(
+                "UPDATE parents SET label = ?1 WHERE monday_id = ?2",
+                params![label, id],
+            )?;
+            if changed == 0 {
+                return Err(Error::ParentNotFound(id));
+            }
             Ok(())
         })
     }
@@ -883,6 +991,22 @@ fn day_total(ctx: &Ctx, date: &str) -> Result<i64> {
     let day: Interval = timeline::day_bounds(date, ctx.offset)?;
     let mut stmt = ctx.tx.prepare("SELECT start_at, end_at FROM entries WHERE removed = 0 AND start_at < ?1 AND COALESCE(end_at, ?3) > ?2")?;
     let rows = stmt.query_map(params![day.end, day.start, ctx.now], |r| {
+        Ok((r.get::<_, i64>(0)?, r.get::<_, Option<i64>>(1)?))
+    })?;
+    let mut total = 0;
+    for row in rows {
+        let (start, end) = row?;
+        let end = end.unwrap_or(ctx.now).min(day.end);
+        total += (end - start.max(day.start)).max(0);
+    }
+    Ok(total)
+}
+
+/// Le temps chronométré sur un lot un jour local, entrée ouverte comprise.
+fn lot_day_total(ctx: &Ctx, lot_id: i64, date: &str) -> Result<i64> {
+    let day: Interval = timeline::day_bounds(date, ctx.offset)?;
+    let mut stmt = ctx.tx.prepare("SELECT start_at, end_at FROM entries WHERE removed = 0 AND lot_id = ?4 AND start_at < ?1 AND COALESCE(end_at, ?3) > ?2")?;
+    let rows = stmt.query_map(params![day.end, day.start, ctx.now, lot_id], |r| {
         Ok((r.get::<_, i64>(0)?, r.get::<_, Option<i64>>(1)?))
     })?;
     let mut total = 0;
