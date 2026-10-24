@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.2.0",
+    "date": "2026-10-24",
+    "title": "Le chronomètre et Claude",
+    "notes": [
+      {
+        "kind": "new",
+        "text": "Kairos sait maintenant suivre le temps : lancer, changer, mettre en pause et arrêter une tâche, corriger la journée, puis préparer la ligne à saisir dans Monday avec les arrondis. Tout passe par la commande kairos ; l'écran de l'app arrive ensuite.",
+        "how": "Dans un terminal : kairos start --parent 12406850311, puis kairos status."
+      },
+      {
+        "kind": "new",
+        "text": "Claude peut piloter Kairos : Claude Code et Claude Desktop lancent, changent et arrêtent le chronomètre pour vous. Les actions difficiles à défaire (supprimer une entrée, clôturer ou marquer la journée saisie) demandent votre accord, sauf si vous choisissez de laisser Claude agir seul.",
+        "how": "Claude Code : claude mcp add kairos --scope user -- kairos mcp. Claude Desktop : ouvrez le fichier Kairos_0.2.0.mcpb. Pour laisser Claude agir seul : kairos config claude_autonomy auto."
+      },
+      {
+        "kind": "new",
+        "text": "Avec Homebrew, la commande kairos est installée en même temps que l'app. Si vous aviez déjà installé la 0.1.0 par Homebrew, la commande n'a pas été ajoutée par la mise à jour automatique.",
+        "how": "Une fois : brew reinstall --cask kairos."
+      }
+    ]
+  },
+  {
     "version": "0.1.0",
     "date": "2026-10-23",
     "title": "Le socle",
