@@ -167,9 +167,11 @@ impl<C: Clock> Kairos<C> {
             if let Some(lot_id) = paused_lot(ctx)? {
                 let last = last_entry_of(ctx, lot_id)?;
                 let since = last.as_ref().and_then(|e| e.end).unwrap_or(ctx.now);
+                let duration = last.as_ref().map_or(0, |e| (since - e.start).max(0));
                 return Ok(Status::Paused {
                     lot: lot_view(ctx, lot_id)?,
                     since,
+                    duration,
                     launched_by: last.as_ref().and_then(|e| e.source),
                     workdir: last.and_then(|e| e.workdir),
                 });

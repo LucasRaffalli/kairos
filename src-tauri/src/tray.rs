@@ -1,13 +1,23 @@
-//! L'icône de la barre de menus : un clic montre ou cache le popover.
+//! L'icône de la barre de menus : un clic montre ou cache le popover, le titre affiche la
+//! durée du lot, « Quitter Kairos » demande quoi faire d'un lot en cours.
 
 use std::time::{Duration, Instant};
 
+use kairos_core::clock::{Clock, SystemClock};
+use kairos_core::model::Status;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
 
-use crate::placement::{popover_position, Rect, Size};
+use crate::bridge;
+use crate::placement::{popover_height, popover_position, Rect, Size};
+
+const TRAY_ID: &str = "kairos";
+const POPOVER: &str = "popover";
+
+/// Émis quand on quitte avec un lot en cours : le popover affiche le dialogue « Quitter ».
+pub const QUIT_REQUESTED: &str = "kairos://quit-requested";
 
 /// Un clic sur l'icône retire d'abord le focus au popover (il se masque), puis
 /// arrive : sans cette fenêtre, le même clic le fermerait puis le rouvrirait.
@@ -51,7 +61,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&quit])?;
     let icon = Image::from_bytes(include_bytes!("../icons/sources/tray-template.png"))?;
 
-    TrayIconBuilder::with_id("kairos")
+    TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .icon_as_template(true)
         .tooltip("Kairos")
@@ -60,7 +70,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| {
             if event.id() == "quit" {
-                app.exit(0);
+                request_quit(app);
             }
         })
         .on_tray_icon_event(|tray, event| {
@@ -72,7 +82,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
             } = event
             {
                 let app = tray.app_handle();
-                let Some(window) = app.get_webview_window("popover") else {
+                let Some(window) = app.get_webview_window(POPOVER) else {
                     return;
                 };
                 let blurred = app.state::<LastBlur>().is_recent();
@@ -93,36 +103,159 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Pose le popover sous l'icône, dans l'écran où se trouve l'icône.
-fn place(window: &tauri::WebviewWindow, tray_rect: tauri::Rect) {
-    let scale = window.scale_factor().unwrap_or(1.0);
-    let tray_pos: PhysicalPosition<f64> = tray_rect.position.to_physical(scale);
-    let tray_size: PhysicalSize<f64> = tray_rect.size.to_physical(scale);
-    let tray = Rect {
-        x: tray_pos.x,
-        y: tray_pos.y,
-        width: tray_size.width,
-        height: tray_size.height,
-    };
-
-    let Ok(Some(monitor)) = window.monitor_from_point(tray.x, tray.y) else {
+/// Montre le popover sous l'icône et lui donne le focus (seconde instance, dialogue « Quitter »).
+pub fn show_popover(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(POPOVER) else {
         return;
     };
-    let mp = monitor.position();
-    let ms = monitor.size();
-    let screen = Rect {
-        x: f64::from(mp.x),
-        y: f64::from(mp.y),
-        width: f64::from(ms.width),
-        height: f64::from(ms.height),
-    };
+    if let Some(rect) = tray_rect(app) {
+        place(&window, rect);
+    }
+    let _ = window.show();
+    let _ = window.set_focus();
+}
 
+/// « Quitter Kairos » (menu de l'icône ou ⌘Q) : sans lot en cours, l'app quitte ; avec un lot
+/// en cours, le popover s'ouvre et l'interface affiche le dialogue.
+pub fn request_quit(app: &AppHandle) {
+    let app = app.clone();
+    // Ouvrir la base peut attendre un verrou : jamais sur le fil principal.
+    std::thread::spawn(move || {
+        let running = bridge::open()
+            .and_then(|k| Ok(k.status()?))
+            .map(|status| bridge::lot_is_running(&status));
+        if let Ok(false) = running {
+            app.exit(0);
+            return;
+        }
+        // Un lot tourne, ou la base ne répond pas : on demande plutôt que de deviner.
+        show_popover(&app);
+        let _ = app.emit(QUIT_REQUESTED, ());
+    });
+}
+
+/// Ajuste la hauteur du popover à son contenu (`pixels` : pixels CSS), plafonnée à l'écran,
+/// en le gardant sous l'icône.
+pub fn resize_popover(window: &WebviewWindow, pixels: f64) {
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let (Ok(size), Ok(position)) = (window.outer_size(), window.outer_position()) else {
+        return;
+    };
+    let tray = tray_rect(window.app_handle());
+    let screen = tray
+        .and_then(|rect| screen_of(window, physical_rect(rect, scale)))
+        .or_else(|| current_screen(window));
+    let Some(screen) = screen else {
+        return;
+    };
+    let height = (popover_height(pixels, screen.height / scale) * scale).round();
+    let popover = Size {
+        width: f64::from(size.width),
+        height,
+    };
+    let _ = window.set_size(PhysicalSize::new(popover.width, popover.height));
+    match tray {
+        Some(rect) => place_sized(window, rect, popover),
+        // Sans la position de l'icône, on garde le coin haut-gauche où il est.
+        None => {
+            let _ = window.set_position(position);
+        }
+    }
+}
+
+/// Le titre à côté de l'icône, tenu à jour par le fil de surveillance.
+#[derive(Default)]
+pub struct MenuTitle {
+    /// Le dernier état lu dans la base.
+    status: Option<Status>,
+    /// La minute (depuis l'epoch) de cette lecture.
+    read_at_minute: Option<i64>,
+    /// Le titre affiché, pour ne le poser que s'il change.
+    shown: Option<Option<String>>,
+}
+
+impl MenuTitle {
+    /// Appelé chaque seconde. Relit l'état quand la base a changé et à chaque minute pile (la
+    /// coupure de minuit, par exemple), puis recalcule le titre depuis l'heure de départ.
+    pub fn tick(&mut self, app: &AppHandle, base_changed: bool) {
+        let now = SystemClock.now();
+        let minute = now.div_euclid(60);
+        if base_changed || self.read_at_minute != Some(minute) {
+            // Base illisible : on garde le dernier titre et on réessaie à la seconde suivante.
+            if let Ok(status) = bridge::open().and_then(|k| Ok(k.status()?)) {
+                self.status = Some(status);
+                self.read_at_minute = Some(minute);
+            }
+        }
+        let Some(status) = &self.status else {
+            return;
+        };
+        let title = bridge::menu_title(status, now);
+        if self.shown.as_ref() != Some(&title) {
+            if let Some(tray) = app.tray_by_id(TRAY_ID) {
+                let _ = tray.set_title(title.as_deref());
+            }
+            self.shown = Some(title);
+        }
+    }
+}
+
+fn tray_rect(app: &AppHandle) -> Option<tauri::Rect> {
+    app.tray_by_id(TRAY_ID)?.rect().ok().flatten()
+}
+
+fn physical_rect(rect: tauri::Rect, scale: f64) -> Rect {
+    let position: PhysicalPosition<f64> = rect.position.to_physical(scale);
+    let size: PhysicalSize<f64> = rect.size.to_physical(scale);
+    Rect {
+        x: position.x,
+        y: position.y,
+        width: size.width,
+        height: size.height,
+    }
+}
+
+fn monitor_rect(monitor: &tauri::Monitor) -> Rect {
+    let position = monitor.position();
+    let size = monitor.size();
+    Rect {
+        x: f64::from(position.x),
+        y: f64::from(position.y),
+        width: f64::from(size.width),
+        height: f64::from(size.height),
+    }
+}
+
+/// L'écran qui contient l'icône.
+fn screen_of(window: &WebviewWindow, tray: Rect) -> Option<Rect> {
+    let monitor = window.monitor_from_point(tray.x, tray.y).ok()??;
+    Some(monitor_rect(&monitor))
+}
+
+fn current_screen(window: &WebviewWindow) -> Option<Rect> {
+    let monitor = window.current_monitor().ok()??;
+    Some(monitor_rect(&monitor))
+}
+
+/// Pose le popover sous l'icône, dans l'écran où se trouve l'icône.
+fn place(window: &WebviewWindow, tray_rect: tauri::Rect) {
     let Ok(size) = window.outer_size() else {
         return;
     };
     let popover = Size {
         width: f64::from(size.width),
         height: f64::from(size.height),
+    };
+    place_sized(window, tray_rect, popover);
+}
+
+/// Comme [`place`], pour un popover de taille connue (pixels physiques) : juste après un
+/// redimensionnement, la taille de la fenêtre n'est pas encore à jour.
+fn place_sized(window: &WebviewWindow, tray_rect: tauri::Rect, popover: Size) {
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let tray = physical_rect(tray_rect, scale);
+    let Some(screen) = screen_of(window, tray) else {
+        return;
     };
     let at = popover_position(tray, popover, screen);
     let _ = window.set_position(PhysicalPosition::new(at.x, at.y));

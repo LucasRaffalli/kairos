@@ -163,7 +163,10 @@ pub enum Status {
     },
     Paused {
         lot: LotView,
+        /// Début de la pause : la fin de la dernière entrée.
         since: i64,
+        /// Secondes de la dernière entrée, figées par la pause.
+        duration: i64,
         launched_by: Option<Source>,
         workdir: Option<String>,
     },

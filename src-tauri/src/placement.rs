@@ -7,6 +7,11 @@
 pub const EDGE_MARGIN: f64 = 8.0;
 /// Espace entre l'icône et le haut du popover.
 pub const GAP_BELOW_TRAY: f64 = 4.0;
+/// Le popover ne dépasse jamais la hauteur de l'écran moins cette marge (pixels logiques) :
+/// au-delà, son contenu défile.
+pub const SCREEN_HEIGHT_MARGIN: f64 = 80.0;
+/// Hauteur minimale du popover (pixels logiques), même si l'interface demande moins.
+pub const MIN_POPOVER_HEIGHT: f64 = 120.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point {
@@ -40,6 +45,16 @@ pub fn popover_position(tray: Rect, popover: Size, screen: Rect) -> Point {
     let y = below.clamp(screen.y, max_y);
 
     Point { x, y }
+}
+
+/// La hauteur du popover pour un contenu de `requested` pixels, sur un écran de
+/// `screen_height` pixels (logiques tous les deux).
+pub fn popover_height(requested: f64, screen_height: f64) -> f64 {
+    let max = (screen_height - SCREEN_HEIGHT_MARGIN).max(MIN_POPOVER_HEIGHT);
+    if !requested.is_finite() {
+        return MIN_POPOVER_HEIGHT;
+    }
+    requested.clamp(MIN_POPOVER_HEIGHT, max)
 }
 
 #[cfg(test)]
@@ -150,5 +165,14 @@ mod tests {
             popover_position(tray_at(100.0), POPOVER, tiny).x,
             EDGE_MARGIN
         );
+    }
+
+    #[test]
+    fn the_height_follows_the_content_up_to_the_screen_minus_80() {
+        assert_eq!(popover_height(420.0, 900.0), 420.0);
+        assert_eq!(popover_height(1200.0, 900.0), 820.0);
+        assert_eq!(popover_height(10.0, 900.0), MIN_POPOVER_HEIGHT);
+        assert_eq!(popover_height(f64::NAN, 900.0), MIN_POPOVER_HEIGHT);
+        assert_eq!(popover_height(500.0, 150.0), MIN_POPOVER_HEIGHT);
     }
 }
