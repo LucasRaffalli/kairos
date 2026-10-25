@@ -4,7 +4,7 @@ import { fill } from '@app/lang/fill';
 import { injectT } from '@app/lang/i18n.service';
 import type { LotView } from '@app/services/kairos/kairos-api';
 import { KairosStore } from '@app/services/kairos/kairos.store';
-import { SectionTitle } from '@app/ui';
+import { ScrollFade, SectionTitle } from '@app/ui';
 
 import { formatHm, formatTimeOfDay } from './logic/clock';
 import { todayRows, type TodayRow } from './logic/today';
@@ -17,11 +17,11 @@ import { lotTitle, parentColorIndex } from './logic/view';
  */
 @Component({
   selector: 'app-today-list',
-  imports: [SectionTitle],
+  imports: [ScrollFade, SectionTitle],
   template: `
     @if (day().rows.length) {
       <k-section-title [title]="fill(t()('today.title'), { total: formatHm(day().total) })" />
-      <ul class="rows scroll-y">
+      <ul class="rows scroll-y" kScrollFade="y">
         @for (row of day().rows; track row.id) {
           <li class="row" [class.open]="row.open">
             <span class="swatch" [attr.data-color]="color(row.lot)" aria-hidden="true"></span>

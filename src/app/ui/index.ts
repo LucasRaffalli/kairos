@@ -7,4 +7,5 @@ export { Icon, type IconName } from './icon';
 export { PopoverHeader } from './popover-header';
 export { QuickResume } from './quick-resume';
 export { RecentPill } from './recent-pill';
+export { ScrollFade } from './scroll-fade';
 export { SectionTitle } from './section-title';

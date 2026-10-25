@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, injec
 import { injectT } from '@app/lang/i18n.service';
 import type { LotView } from '@app/services/kairos/kairos-api';
 import { KairosStore } from '@app/services/kairos/kairos.store';
-import { Button, Chip, Field, Icon, QuickResume, RecentPill, SectionTitle } from '@app/ui';
+import { Button, Chip, Field, Icon, QuickResume, RecentPill, ScrollFade, SectionTitle } from '@app/ui';
 
 import { formatClock } from './logic/clock';
 import { errorField, errorMessage, type ErrorField } from './logic/errors';
@@ -21,7 +21,7 @@ const CHOICES_DELAY_MS = 300;
  */
 @Component({
   selector: 'app-start-view',
-  imports: [Button, Chip, Field, Icon, QuickResume, RecentPill, SectionTitle],
+  imports: [Button, Chip, Field, Icon, QuickResume, RecentPill, ScrollFade, SectionTitle],
   templateUrl: './start-view.html',
   styleUrl: './start-view.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

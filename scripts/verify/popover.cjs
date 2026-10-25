@@ -45,12 +45,32 @@ const lib = bundle([
   `${L}/launch.ts`,
   `${L}/errors.ts`,
   `${L}/today.ts`,
+  'src/app/ui/scroll-fade.logic.ts',
   'src/app/lang/fill.ts',
   'src/app/lang/fr.ts',
   'src/app/lang/en.ts',
   `${S}/mock-kairos-api.ts`,
   `${S}/kairos.store.ts`,
 ]);
+
+// --- 0. Dégradés de défilement : reste-t-il du contenu avant / après ? --------
+{
+  const more = lib.moreContent;
+  const eq = (a, b) => a.before === b.before && a.after === b.after;
+  check('défilement : au début, du contenu après seulement', eq(more({ offset: 0, size: 500, client: 200 }), { before: false, after: true }));
+  check('défilement : au milieu, avant et après', eq(more({ offset: 100, size: 500, client: 200 }), { before: true, after: true }));
+  check('défilement : au bout, du contenu avant seulement', eq(more({ offset: 300, size: 500, client: 200 }), { before: true, after: false }));
+  check('défilement : tolérance d’1 px en bas (pixels fractionnaires)', eq(more({ offset: 299.4, size: 500, client: 200 }), { before: true, after: false }));
+  check('défilement : tolérance d’1 px en haut', eq(more({ offset: 0.6, size: 500, client: 200 }), { before: false, after: true }));
+  check('défilement : 2 px de reste comptent', more({ offset: 298, size: 500, client: 200 }).after === true);
+  check('défilement : contenu qui ne déborde pas', eq(more({ offset: 0, size: 200, client: 200 }), { before: false, after: false }));
+  check('défilement : débord d’1 px seulement = pas de dégradé', eq(more({ offset: 0, size: 201, client: 200 }), { before: false, after: false }));
+  check('défilement : contenu plus court que la zone', eq(more({ offset: 0, size: 80, client: 200 }), { before: false, after: false }));
+  check(
+    'défilement : décalage négatif ou trop grand borné',
+    eq(more({ offset: -5, size: 500, client: 200 }), { before: false, after: true }) && more({ offset: 900, size: 500, client: 200 }).after === false,
+  );
+}
 
 // --- 1. Formats de durée ------------------------------------------------------
 check('formatClock 2533', lib.formatClock(2533) === '00:42:13');

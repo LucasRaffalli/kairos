@@ -78,11 +78,42 @@ body {
   box-shadow: 0 0 0 3px var(--color-status-danger-ring);
 }
 
-// Une zone qui défile à la verticale : barre fine et discrète, sur la couleur de bordure.
+// Les zones qui défilent : une barre de 4 px, discrète, à la couleur de bordure. Seulement les
+// pseudo-éléments WebKit : `scrollbar-width` et `scrollbar-color` les désactivent, et la barre
+// native, énorme, reviendrait (elle s'hérite aussi par les zones enfants).
+.scroll-x,
+.scroll-y {
+  &::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border-radius: var(--radius-full);
+    background: var(--color-border-default);
+  }
+}
+
 .scroll-y {
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-border-default) transparent;
+}
+
+.scroll-x {
+  overflow-x: auto;
+}
+
+// Le fondu d'une zone qui défile (directive `kScrollFade`) : les bords s'effacent là où il reste
+// du contenu. Un masque ne dépend d'aucune couleur : `currentcolor` n'y sert que d'opaque.
+.k-fade-y {
+  mask-image: linear-gradient(to bottom, transparent, currentcolor var(--fade-start, 0px), currentcolor calc(100% - var(--fade-end, 0px)), transparent);
+}
+
+.k-fade-x {
+  mask-image: linear-gradient(to right, transparent, currentcolor var(--fade-start, 0px), currentcolor calc(100% - var(--fade-end, 0px)), transparent);
 }
 
 // Lu par les lecteurs d'écran, invisible à l'écran (état annoncé, durée lisible du chrono).

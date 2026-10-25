@@ -246,10 +246,44 @@ const src = (name, ext) => (read(path.join(UI, `${name}.${ext}`)) ?? '').replace
 }
 
 // Chaque composant du dossier doit être connu de ce contrôle.
+// Le fondu des zones qui défilent : une directive (pas un composant) et sa logique pure.
+const fade = read(path.join(UI, 'scroll-fade.ts'));
+check('scroll-fade.ts existe, exporté par index.ts', fade !== null && index !== null && index.includes("./scroll-fade'"));
+if (fade !== null) {
+  check(
+    'scroll-fade : directive [kScrollFade] sur signaux',
+    /selector:\s*'\[kScrollFade\]'/.test(fade) && /input<'x' \| 'y'>/.test(fade) && /signal\(/.test(fade),
+  );
+  check('scroll-fade : observe défilement, taille et contenu', /\(scroll\)/.test(fade) && /ResizeObserver/.test(fade) && /MutationObserver/.test(fade));
+  check('scroll-fade : ni @Input ni couleur littérale', !/@(Input|Output)\(/.test(fade) && !/#[0-9a-fA-F]{3,8}\b/.test(fade));
+}
+const base = (read(path.join(REPO, 'src', 'styles', '_base.scss')) ?? '').replace(/^\s*\/\/.*$/gm, '');
+check(
+  'fondu : masque, sans couleur littérale',
+  /\.k-fade-y\s*\{[^}]*mask-image/.test(base) && /\.k-fade-x\s*\{[^}]*mask-image/.test(base) && !/mask-image[^;]*#/.test(base),
+);
+check(
+  'barres de défilement : pseudo-éléments WebKit, jamais scrollbar-width / scrollbar-color',
+  /::-webkit-scrollbar/.test(base) && !/scrollbar-(width|color)/.test(base),
+);
+const appStyles = [];
+(function walk(dir) {
+  for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, f.name);
+    if (f.isDirectory()) walk(full);
+    else if (f.name.endsWith('.scss')) appStyles.push(full);
+  }
+})(path.join(REPO, 'src', 'app'));
+check(
+  'aucun scrollbar-width / scrollbar-color dans les composants',
+  appStyles.every((f) => !/scrollbar-(width|color)/.test(read(f))),
+);
+
 if (fs.existsSync(UI)) {
   for (const file of fs.readdirSync(UI)) {
     const base = file.replace(/\.ts$/, '');
-    if (file.endsWith('.ts') && base !== 'index' && !COMPONENTS[base]) check(`${file} est contrôlé`, false, 'à ajouter à COMPONENTS');
+    if (file.endsWith('.ts') && base !== 'index' && !base.startsWith('scroll-fade') && !COMPONENTS[base])
+      check(`${file} est contrôlé`, false, 'à ajouter à COMPONENTS');
   }
 }
 

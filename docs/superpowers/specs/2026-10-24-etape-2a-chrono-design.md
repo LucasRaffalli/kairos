@@ -93,6 +93,7 @@ Après un essai en local, Lucas a choisi une **fenêtre qui reste ouverte** à l
 - Le titre de l'icône affiche les secondes (`H:MM:SS`), à la demande de Lucas : une durée à la minute donnait l'impression d'un compteur bloqué. Le réglage « Durée dans la barre de menus » (2c) pourra l'adapter.
 - Réglage interne `menu_title_seconds` (`true` par défaut, `false` pour `H:MM`), dans la table `settings` du cœur et modifiable par `kairos config menu_title_seconds <true|false>`. Sans ligne en base, la valeur est le défaut (aucune migration : les anciennes versions restent compatibles) ; une valeur invalide retombe sur le défaut côté app et est refusée par `config`. L'écran Réglages (2c) l'exposera.
 - **Hauteur fixe de 560 pt** pour toutes les vues (largeur 340 pt inchangée), au lieu de la hauteur qui suivait le contenu. Une seule source : `height` de la fenêtre dans `tauri.conf.json` ; le style prend `100vh`. Le premier affichage la ramène à l'écran moins 80 px sur un écran trop petit. L'en-tête et les boutons restent en place ; seules la liste du jour, le formulaire de lancement et « Reprendre » défilent. La commande `set_popover_height` et la mesure de hauteur côté interface sont supprimées.
+- Les zones qui défilent ont une barre fine de 4 px (pseudo-éléments WebKit seulement : `scrollbar-width` et `scrollbar-color` faisaient revenir la barre native, énorme) et un fondu (directive `kScrollFade`, masque) du côté où il reste du contenu.
 
 ## La barre de menus
 
