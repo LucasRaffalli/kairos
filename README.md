@@ -6,11 +6,11 @@ Chronomètre de barre de menus pour macOS. Kairos mesure le temps par **tâche p
 
 La conception complète (pourquoi, concept, utilisation, cahier des charges, technique, design) est dans la page Notion « Kairos ». Les maquettes sont dans le fichier Figma [Kairos](https://www.figma.com/design/st5ct8bxzDkzwnY1UEH1YS).
 
-**État : étape 2a (le chrono dans l'app).** L'icône de la barre de menus ouvre un popover qui lance, change, met en pause et arrête le chronomètre, comme la ligne de commande et Claude. La journée (modifier, clôturer), les réglages et les notifications arrivent en 2b à 2d. L'icône de l'app est **provisoire** (un aplat Iris et le glyphe blanc).
+**État : étape 2a (le chrono dans l'app).** L'icône de la barre de menus ouvre la fenêtre de Kairos, qui lance, change, met en pause et arrête le chronomètre, comme la ligne de commande et Claude. La journée (modifier, clôturer), les réglages et les notifications arrivent en 2b à 2d. L'icône de l'app est **provisoire** (un aplat Iris et le glyphe blanc).
 
 ## L'app (barre de menus)
 
-Cliquer sur l'icône ouvre la fenêtre de Kairos. Il suit la base en direct : un `kairos start` tapé dans un terminal, ou un lot lancé par Claude, y apparaît en moins de 2 secondes, avec « Lancé par … à … · dossier ».
+Cliquer sur l'icône ouvre la fenêtre de Kairos. Elle suit la base en direct : un `kairos start` tapé dans un terminal, ou un lot lancé par Claude, y apparaît en moins de 2 secondes, avec « Lancé par … à … · dossier ».
 
 Trois vues, selon l'état :
 
@@ -22,7 +22,7 @@ L'icône affiche la durée du lot en cours en `H:MM` (sans secondes), « Pause �
 
 **Raccourcis** : ⌘↵ lance (ou change de lot), ⌘. arrête, Échap range la fenêtre. ⌘Q avec un lot en cours demande s'il faut garder le chrono.
 
-**La fenêtre se déplace et reste ouverte** : on la glisse par la fine barre du haut, elle garde sa place et ne se ferme plus quand on clique ailleurs. Aucune action ne la range : lancer, pause, reprise, arrêt et changement de lot la laissent ouverte. Seuls le bouton rouge ou jaune, Échap, ⌘W et un clic sur l'icône quand elle est au premier plan la rangent dans la barre de menus ; l'app continue de tourner. Un clic sur l'icône quand elle est derrière d'autres fenêtres la ramène devant. Pour quitter, ⌘Q ou « Quitter Kairos » dans le menu de l'icône. Quand la base est illisible et la vue grisée, les raccourcis ⌘ sont ignorés. Si la base est verrouillée par un autre programme, un bandeau l'indique avec un bouton **Réessayer**, et la dernière vue connue reste affichée en grisé. Une seconde instance de l'app se ferme aussitôt et montre la première.
+**La fenêtre se déplace et reste ouverte** : on la glisse par la fine barre du haut, elle garde sa place et ne se ferme plus quand on clique ailleurs. Aucune action ne la range : lancer, pause, reprise, arrêt et changement de lot la laissent ouverte. Seuls le bouton rouge, ⌘W, Échap et un clic sur l'icône quand elle est au premier plan la rangent dans la barre de menus ; l'app continue de tourner. Les boutons jaune et vert sont grisés : sans icône dans le Dock, une fenêtre réduite n'aurait nulle part où aller, et la hauteur suit le contenu. Un clic sur l'icône quand elle est derrière d'autres fenêtres la ramène devant. Pour quitter, ⌘Q ou « Quitter Kairos » dans le menu de l'icône. Quand la base est illisible et la vue grisée, les raccourcis ⌘ sont ignorés. Si la base est verrouillée par un autre programme, un bandeau l'indique avec un bouton **Réessayer**, et la dernière vue connue reste affichée en grisé. Une seconde instance de l'app se ferme aussitôt et montre la première.
 
 **À venir** : 2b la journée (modifier, ajouter, supprimer une entrée, clôturer, le texte à saisir dans Monday) ; 2c les réglages (engrenage, raccourcis globaux, parents épinglés, premier lancement) ; 2d la minuterie de fin, les absences et les notifications.
 
@@ -120,7 +120,7 @@ Seul `parent` est obligatoire. Kairos ne stocke jamais le texte de tes messages 
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `crates/kairos-core`    | Le cœur Rust : toutes les règles métier (étape 1). L'app et la ligne de commande l'utilisent, donc donnent les mêmes refus et les mêmes messages. |
 | `crates/kairos-cli`     | Le binaire `kairos` : ligne de commande, hooks de Claude Code, serveur MCP.                                                                       |
-| `src-tauri/`            | L'app Tauri v2 : icône de la barre de menus, popover, mises à jour.                                                                               |
+| `src-tauri/`            | L'app Tauri v2 : icône de la barre de menus, fenêtre, mises à jour.                                                                               |
 | `src/`                  | L'interface Angular 22 (zoneless, signaux, OnPush).                                                                                               |
 | `design/tokens.json`    | Les couleurs, exportées des variables Figma. `npm run tokens` en génère `src/styles/_tokens.scss`.                                                |
 | `infra/release-worker/` | Le Worker Cloudflare qui sert les releases depuis le bucket R2.                                                                                   |

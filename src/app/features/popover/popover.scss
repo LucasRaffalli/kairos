@@ -21,8 +21,8 @@ $titlebar-height: 28px;
   color: var(--color-text-primary);
 }
 
-// La zone de glissement. Sa marge négative reprend l'espace du `gap` : le contenu ne descend que
-// de la hauteur de la barre moins cet espace.
+// La zone de glissement. Sa marge négative annule exactement le `gap` qui la suit : le contenu
+// commence donc juste sous la barre, à 28 px du haut de la fenêtre.
 .titlebar {
   flex: none;
   height: $titlebar-height;

@@ -431,7 +431,13 @@ check('relancer un lot sans ID : par son nom', r3.parent_monday_id === null && r
   const rust = (file) => read(path.join(REPO, 'src-tauri', 'src', file)).split('#[cfg(test)]')[0];
   const tray = rust('tray.rs');
   check('plus de fermeture sur perte de focus', !/Focused|LastBlur|HideAfterBlur/.test(tray + rust('lib.rs')));
-  check('la demande de fermeture masque sans détruire', /CloseRequested[\s\S]*prevent_close\(\)[\s\S]*\.hide\(\)/.test(tray));
+  const onClose = tray.match(/if let WindowEvent::CloseRequested \{[^}]*\} = event \{([\s\S]*?)\n {8}\}/);
+  check('la demande de fermeture masque sans détruire', onClose !== null && /prevent_close\(\)/.test(onClose[1]) && /\.hide\(\)/.test(onClose[1]));
+  const hides = fs
+    .readdirSync(path.join(REPO, 'src-tauri', 'src'))
+    .filter((f) => f.endsWith('.rs'))
+    .reduce((n, f) => n + (rust(f).match(/\.hide\(\)/g) ?? []).length, 0);
+  check('seuls ⌘W, le clic sur l’icône et la fermeture masquent la fenêtre', hides === 3, String(hides));
   check('⌘W du menu de l’app masque la fenêtre', /"cmd\+w"/.test(tray) && !/close_window\(/.test(tray));
   check('la fenêtre n’est jamais détruite', !/\.destroy\(|\.close\(\)/.test(tray));
 
