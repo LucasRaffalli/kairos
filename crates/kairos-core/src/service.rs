@@ -475,11 +475,15 @@ impl<C: Clock> Kairos<C> {
     pub fn config_get(&self, key: &str) -> Result<String> {
         self.with_tx(|ctx| {
             check_setting_key(key)?;
-            Ok(ctx
+            let stored: Option<String> = ctx
                 .tx
                 .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
                     r.get(0)
-                })?)
+                })
+                .optional()?;
+            // Les réglages ajoutés après la première version n'ont pas de ligne tant qu'on ne les
+            // a pas écrits (pas de migration, donc les anciennes versions restent compatibles).
+            Ok(stored.unwrap_or_else(|| default_setting(key).to_string()))
         })
     }
 
@@ -499,12 +503,19 @@ impl<C: Clock> Kairos<C> {
                         "claude_autonomy vaut ask (Claude demande avant les actions difficiles à défaire) ou auto (il agit seul) ; reçu « {value} »"
                     )))
                 }
+                "menu_title_seconds" if ["true", "false"].contains(&value) => value.to_string(),
+                "menu_title_seconds" => {
+                    return Err(Error::InvalidSetting(format!(
+                        "menu_title_seconds vaut true (H:MM:SS dans la barre de menus) ou false (H:MM) ; reçu « {value} »"
+                    )))
+                }
                 _ => clean_text(&Some(value.to_string()), "Le poste principal")?.ok_or_else(
                     || Error::InvalidSetting("main_subtask ne peut pas être vide".into()),
                 )?,
             };
             ctx.tx.execute(
-                "UPDATE settings SET value = ?1 WHERE key = ?2",
+                "INSERT INTO settings (key, value) VALUES (?2, ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 params![value, key],
             )?;
             Ok(())
@@ -1335,9 +1346,17 @@ fn totals(ctx: &Ctx, date: &str) -> Result<Totals> {
 
 fn check_setting_key(key: &str) -> Result<()> {
     match key {
-        "main_subtask" | "rounding_minutes" | "claude_autonomy" => Ok(()),
+        "main_subtask" | "rounding_minutes" | "claude_autonomy" | "menu_title_seconds" => Ok(()),
         other => Err(Error::InvalidSetting(format!(
-            "clé inconnue « {other} » (main_subtask, rounding_minutes ou claude_autonomy)"
+            "clé inconnue « {other} » (main_subtask, rounding_minutes, claude_autonomy ou menu_title_seconds)"
         ))),
+    }
+}
+
+/// La valeur d'un réglage qui n'a pas encore de ligne dans la base.
+fn default_setting(key: &str) -> &'static str {
+    match key {
+        "menu_title_seconds" => "true",
+        _ => "",
     }
 }

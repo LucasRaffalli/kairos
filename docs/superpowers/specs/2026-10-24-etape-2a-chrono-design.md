@@ -91,6 +91,7 @@ Après un essai en local, Lucas a choisi une **fenêtre qui reste ouverte** à l
 - Clic sur l'icône : fenêtre rangée, on l'affiche ; visible mais derrière d'autres fenêtres, on la ramène devant ; visible et au premier plan, on la range.
 - Position : centrée sous l'icône au tout premier affichage, puis gardée en mémoire pour la session (rien sur disque). Un changement de hauteur garde le bord supérieur ; la fenêtre n'est remontée que si elle sortirait de l'écran par le bas.
 - Le titre de l'icône affiche les secondes (`H:MM:SS`), à la demande de Lucas : une durée à la minute donnait l'impression d'un compteur bloqué. Le réglage « Durée dans la barre de menus » (2c) pourra l'adapter.
+- Réglage interne `menu_title_seconds` (`true` par défaut, `false` pour `H:MM`), dans la table `settings` du cœur et modifiable par `kairos config menu_title_seconds <true|false>`. Sans ligne en base, la valeur est le défaut (aucune migration : les anciennes versions restent compatibles) ; une valeur invalide retombe sur le défaut côté app et est refusée par `config`. L'écran Réglages (2c) l'exposera.
 
 ## La barre de menus
 

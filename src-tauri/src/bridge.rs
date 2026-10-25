@@ -152,25 +152,40 @@ pub fn stop_if_running<C: Clock>(k: &Kairos<C>) -> BridgeResult<()> {
 }
 
 /// Le titre à côté de l'icône : « 0:42:13 » en cours, « Pause · 0:42:13 » en pause (la durée de
-/// la dernière entrée), rien au repos. Les secondes y sont : une durée à la minute donnait
-/// l'impression d'un compteur bloqué.
-pub fn menu_title(status: &Status, now: i64) -> Option<String> {
+/// la dernière entrée), rien au repos. Avec `seconds` à faux (réglage `menu_title_seconds`), sans
+/// secondes : « 0:42 », que le titre ne change alors qu'à la minute.
+pub fn menu_title(status: &Status, now: i64, seconds: bool) -> Option<String> {
     match status {
         Status::Idle => None,
-        Status::Running { since, .. } => Some(clock(now - since)),
-        Status::Paused { duration, .. } => Some(format!("Pause · {}", clock(*duration))),
+        Status::Running { since, .. } => Some(clock(now - since, seconds)),
+        Status::Paused { duration, .. } => Some(format!("Pause · {}", clock(*duration, seconds))),
     }
 }
 
-/// « H:MM:SS » : heures sans zéro initial, minutes et secondes sur deux chiffres.
-fn clock(seconds: i64) -> String {
-    let seconds = seconds.max(0);
-    format!(
-        "{}:{:02}:{:02}",
-        seconds / 3600,
-        seconds / 60 % 60,
-        seconds % 60
-    )
+/// Le réglage `menu_title_seconds` : seul « false » masque les secondes ; toute autre valeur
+/// (invalide comprise) garde le défaut.
+pub fn shows_seconds(setting: &str) -> bool {
+    setting != "false"
+}
+
+/// L'état dont le titre a besoin, lu en une fois : le statut et le réglage des secondes.
+pub fn read_menu_state() -> BridgeResult<(Status, bool)> {
+    let k = open()?;
+    Ok((
+        k.status()?,
+        shows_seconds(&k.config_get("menu_title_seconds")?),
+    ))
+}
+
+/// « H:MM:SS » ou, sans `seconds`, « H:MM » : heures sans zéro initial, le reste sur deux chiffres.
+fn clock(duration: i64, seconds: bool) -> String {
+    let duration = duration.max(0);
+    let (hours, minutes) = (duration / 3600, duration / 60 % 60);
+    if seconds {
+        format!("{hours}:{minutes:02}:{:02}", duration % 60)
+    } else {
+        format!("{hours}:{minutes:02}")
+    }
 }
 
 /// Les commandes Tauri : chacune ouvre la base, appelle la fonction du pont et rend son résultat.
@@ -504,7 +519,7 @@ mod tests {
 
     #[test]
     fn menu_title_formats() {
-        let at = |secs: i64| menu_title(&running(T9), T9 + secs);
+        let at = |secs: i64| menu_title(&running(T9), T9 + secs, true);
         assert_eq!(at(0).as_deref(), Some("0:00:00"));
         assert_eq!(at(42).as_deref(), Some("0:00:42"));
         assert_eq!(at(59).as_deref(), Some("0:00:59"));
@@ -523,10 +538,44 @@ mod tests {
         };
         // En pause, la durée est celle de la dernière entrée : elle ne bouge plus.
         assert_eq!(
-            menu_title(&paused, T9 + 7200).as_deref(),
+            menu_title(&paused, T9 + 7200, true).as_deref(),
             Some("Pause · 0:42:13")
         );
-        assert_eq!(menu_title(&Status::Idle, T9), None);
+        assert_eq!(menu_title(&Status::Idle, T9, true), None);
+    }
+
+    #[test]
+    fn menu_title_without_seconds_shows_hours_and_minutes() {
+        let at = |secs: i64| menu_title(&running(T9), T9 + secs, false);
+        assert_eq!(at(0).as_deref(), Some("0:00"));
+        assert_eq!(at(59).as_deref(), Some("0:00"));
+        assert_eq!(at(60).as_deref(), Some("0:01"));
+        assert_eq!(at(42 * 60 + 59).as_deref(), Some("0:42"));
+        assert_eq!(at(3600 + 5 * 60 + 9).as_deref(), Some("1:05"));
+        assert_eq!(at(12 * 3600).as_deref(), Some("12:00"));
+        assert_eq!(at(-30).as_deref(), Some("0:00"));
+        let paused = Status::Paused {
+            lot: lot(),
+            since: T9,
+            duration: 42 * 60 + 13,
+            launched_by: None,
+            workdir: None,
+        };
+        assert_eq!(
+            menu_title(&paused, T9 + 7200, false).as_deref(),
+            Some("Pause · 0:42")
+        );
+        assert_eq!(menu_title(&Status::Idle, T9, false), None);
+    }
+
+    #[test]
+    fn only_an_explicit_false_hides_the_seconds() {
+        assert!(shows_seconds("true"));
+        assert!(!shows_seconds("false"));
+        // Une valeur invalide retombe sur le défaut : les secondes.
+        for invalid in ["", "oui", "False", "0"] {
+            assert!(shows_seconds(invalid), "{invalid:?}");
+        }
     }
 
     #[test]

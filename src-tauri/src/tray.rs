@@ -237,8 +237,8 @@ pub fn resize_popover(window: &WebviewWindow, pixels: f64) {
 /// Le titre à côté de l'icône, tenu à jour par le fil de surveillance.
 #[derive(Default)]
 pub struct MenuTitle {
-    /// Le dernier état lu dans la base.
-    status: Option<Status>,
+    /// Le dernier état lu dans la base, avec le réglage des secondes.
+    status: Option<(Status, bool)>,
     /// La minute (depuis l'epoch) de cette lecture.
     read_at_minute: Option<i64>,
     /// Le titre affiché, pour ne le poser que s'il change.
@@ -253,15 +253,15 @@ impl MenuTitle {
         let minute = now.div_euclid(60);
         if base_changed || self.read_at_minute != Some(minute) {
             // Base illisible : on garde le dernier titre et on réessaie à la seconde suivante.
-            if let Ok(status) = bridge::open().and_then(|k| Ok(k.status()?)) {
-                self.status = Some(status);
+            if let Ok(state) = bridge::read_menu_state() {
+                self.status = Some(state);
                 self.read_at_minute = Some(minute);
             }
         }
-        let Some(status) = &self.status else {
+        let Some((status, seconds)) = &self.status else {
             return;
         };
-        let title = bridge::menu_title(status, now);
+        let title = bridge::menu_title(status, now, *seconds);
         if self.shown.as_ref() != Some(&title) {
             if let Some(tray) = app.tray_by_id(TRAY_ID) {
                 let _ = tray.set_title(title.as_deref());
