@@ -175,3 +175,7 @@ brew install --cask lucasraffalli/kairos/kairos
 ```
 
 Le tap est le dépôt `LucasRaffalli/homebrew-kairos`, alimenté par `npm run deploy`.
+
+## Crédits
+
+Les icônes de l'interface viennent de [Lucide](https://lucide.dev) (licence ISC, avec des parties dérivées de Feather, licence MIT) : les tracés utilisés sont copiés dans `src/app/ui/icon.ts` et la licence est reprise dans `NOTICE`.

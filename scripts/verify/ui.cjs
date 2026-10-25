@@ -284,10 +284,13 @@ const src = (name, ext) => (read(path.join(UI, `${name}.${ext}`)) ?? '').replace
     /\.row\s*\{[\s\S]*&:hover/.test(read(path.join(REPO, 'src', 'app', 'features', 'popover', 'today-list.scss')) ?? ''),
   );
   const icon = read(path.join(UI, 'icon.ts')) ?? '';
+  const notice = read(path.join(REPO, 'NOTICE')) ?? '';
   check(
-    'icônes : play, stop, pause, échange à la géométrie de la maquette',
-    ['0 0 15 15', '0 0 14 14', '0 0 16 16'].every((vb) => icon.includes(`viewBox="${vb}"`)) && /M5 3\.4375 11\.875 7\.5/.test(icon),
+    'icônes : Lucide (grille de 24), tracés copiés',
+    /viewBox="0 0 24 24"/.test(icon) && /Lucide/.test(icon) && /M8 3 4 7l4 4/.test(icon) && /M12 19h8/.test(icon) && /r="10"/.test(icon),
   );
+  check('icônes : le trait de 2 vient de la feuille de style', /stroke-width:\s*2/.test(read(path.join(UI, 'icon.scss')) ?? ''));
+  check('NOTICE : mention de la licence ISC de Lucide', /Lucide/.test(notice) && /ISC/.test(notice));
 }
 
 // Le fondu des zones qui défilent : une directive (pas un composant) et sa logique pure.

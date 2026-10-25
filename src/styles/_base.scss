@@ -12,9 +12,10 @@
   --font-size-lg: 15px;
   // Le grand chrono du minuteur.
   --font-size-display: 40px;
-  // Les glyphes des boutons (maquette 245:348) : 15 px, 14 px pour la pause, 16 px pour l'échange.
-  --font-size-icon: 15px;
-  --font-size-icon-sm: 14px;
+  // Les glyphes Lucide des boutons : la taille rendue d'une grille de 24, réglée sur la maquette 245:348.
+  --font-size-icon: 13px;
+  --font-size-icon-xs: 11px;
+  --font-size-icon-sm: 12px;
   --font-size-icon-lg: 16px;
 
   --radius-sm: 6px;

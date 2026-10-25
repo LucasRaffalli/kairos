@@ -40,10 +40,15 @@
   }
 }
 
+// Les glyphes Lucide remplissent 18 à 20 cases sur 24 ; leurs tailles rendent le visuel de la maquette
+// (le carré d'arrêt de 7,5 px, le triangle de 7 px, les barres de pause, la double flèche de 11 px).
 .btn k-icon {
   font-size: var(--font-size-icon);
 
-  // Les tailles de la maquette : 14 px pour la pause, 16 px pour l'échange.
+  &[data-icon='stop'] {
+    font-size: var(--font-size-icon-xs);
+  }
+
   &[data-icon='pause'] {
     font-size: var(--font-size-icon-sm);
   }
