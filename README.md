@@ -10,7 +10,7 @@ La conception complète (pourquoi, concept, utilisation, cahier des charges, tec
 
 ## L'app (barre de menus)
 
-Cliquer sur l'icône ouvre le popover. Il suit la base en direct : un `kairos start` tapé dans un terminal, ou un lot lancé par Claude, y apparaît en moins de 2 secondes, avec « Lancé par … à … · dossier ».
+Cliquer sur l'icône ouvre la fenêtre de Kairos. Il suit la base en direct : un `kairos start` tapé dans un terminal, ou un lot lancé par Claude, y apparaît en moins de 2 secondes, avec « Lancé par … à … · dossier ».
 
 Trois vues, selon l'état :
 
@@ -20,9 +20,9 @@ Trois vues, selon l'état :
 
 L'icône affiche la durée du lot en cours en `H:MM` (sans secondes), « Pause · H:MM » en pause, rien au repos.
 
-**Raccourcis** : ⌘↵ lance (ou change de lot), ⌘. arrête, Échap ferme le popover. ⌘Q avec un lot en cours demande s'il faut garder le chrono.
+**Raccourcis** : ⌘↵ lance (ou change de lot), ⌘. arrête, Échap range la fenêtre. ⌘Q avec un lot en cours demande s'il faut garder le chrono.
 
-**Aucune action ne ferme le popover** : lancer, pause, reprise, arrêt et changement de lot le laissent ouvert. Seuls Échap, la perte du focus et un nouveau clic sur l'icône le ferment. Quand la base est illisible et la vue grisée, les raccourcis ⌘ sont ignorés. Si la base est verrouillée par un autre programme, un bandeau l'indique avec un bouton **Réessayer**, et la dernière vue connue reste affichée en grisé. Une seconde instance de l'app se ferme aussitôt et montre la première.
+**La fenêtre se déplace et reste ouverte** : on la glisse par la fine barre du haut, elle garde sa place et ne se ferme plus quand on clique ailleurs. Aucune action ne la range : lancer, pause, reprise, arrêt et changement de lot la laissent ouverte. Seuls le bouton rouge ou jaune, Échap, ⌘W et un clic sur l'icône quand elle est au premier plan la rangent dans la barre de menus ; l'app continue de tourner. Un clic sur l'icône quand elle est derrière d'autres fenêtres la ramène devant. Pour quitter, ⌘Q ou « Quitter Kairos » dans le menu de l'icône. Quand la base est illisible et la vue grisée, les raccourcis ⌘ sont ignorés. Si la base est verrouillée par un autre programme, un bandeau l'indique avec un bouton **Réessayer**, et la dernière vue connue reste affichée en grisé. Une seconde instance de l'app se ferme aussitôt et montre la première.
 
 **À venir** : 2b la journée (modifier, ajouter, supprimer une entrée, clôturer, le texte à saisir dans Monday) ; 2c les réglages (engrenage, raccourcis globaux, parents épinglés, premier lancement) ; 2d la minuterie de fin, les absences et les notifications.
 

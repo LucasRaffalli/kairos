@@ -81,6 +81,16 @@ La date de l'en-tête est celle de l'ordinateur. Tous les textes passent par `I1
 
 340 px de large ; la hauteur suit le contenu, plafonnée à la hauteur de l'écran moins 80 px, avec défilement interne. Le popover se place sous l'icône (`placement.rs`, existant). Perdre le focus le ferme, comme aujourd'hui ; le brouillon du formulaire (champs, sous-tâche choisie) est gardé en mémoire de l'interface pour la réouverture.
 
+### Amendement du 25 octobre
+
+Après un essai en local, Lucas a choisi une **fenêtre qui reste ouverte** à la place du popover qui se ferme sur perte de focus. Ce qui change dans cette section :
+
+- C'est une vraie fenêtre macOS opaque (`titleBarStyle: "Overlay"`, titre caché, `alwaysOnTop: false`, toujours sans Dock) avec les boutons natifs en haut à gauche. Une fine barre de 28 px (`data-tauri-drag-region`) sert à la déplacer.
+- Rouge : range la fenêtre dans la barre de menus, l'app continue de tourner, la fenêtre n'est jamais détruite. Jaune : désactivé (Tauri 2.12 n'émet aucun événement de réduction à intercepter, et sans Dock une fenêtre réduite n'aurait nulle part où aller). Vert : désactivé (largeur fixe, hauteur qui suit le contenu).
+- Elle ne se ferme plus à la perte du focus. Seuls le bouton rouge, Échap, ⌘W (« Fermer la fenêtre » du menu de l'app, qui masque) et un clic sur l'icône quand elle est au premier plan la rangent. Aucune action du chronomètre ne la ferme.
+- Clic sur l'icône : fenêtre rangée, on l'affiche ; visible mais derrière d'autres fenêtres, on la ramène devant ; visible et au premier plan, on la range.
+- Position : centrée sous l'icône au tout premier affichage, puis gardée en mémoire pour la session (rien sur disque). Un changement de hauteur garde le bord supérieur ; la fenêtre n'est remontée que si elle sortirait de l'écran par le bas.
+
 ## La barre de menus
 
 Le titre à côté de l'icône : la durée du lot en cours en `H:MM` (sans secondes, pour ne pas clignoter), « Pause · H:MM » en pause, rien au repos. Les glyphes précis par état et les états « journée à clôturer » et « à resaisir » sont lus sur les maquettes `231:115`, `231:140` ; ces deux derniers arrivent avec 2b. La couleur ne porte jamais seule un état : la forme et le texte aussi.
