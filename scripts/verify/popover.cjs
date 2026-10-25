@@ -46,12 +46,35 @@ const lib = bundle([
   `${L}/errors.ts`,
   `${L}/today.ts`,
   'src/app/ui/scroll-fade.logic.ts',
+  `${L}/shortcuts.ts`,
   'src/app/lang/fill.ts',
   'src/app/lang/fr.ts',
   'src/app/lang/en.ts',
   `${S}/mock-kairos-api.ts`,
   `${S}/kairos.store.ts`,
 ]);
+
+// --- 0b. ⌘. (arrêter) : QWERTY et AZERTY -----------------------------------------
+{
+  const ev = (o) => ({ key: '', code: '', metaKey: true, shiftKey: false, ctrlKey: false, altKey: false, ...o });
+  const stop = lib.isStopShortcut;
+  check('⌘. : QWERTY (key « . », code Period)', stop(ev({ key: '.', code: 'Period' })) === true);
+  check('⌘. : AZERTY, le point demande Maj (key « . », code Comma)', stop(ev({ key: '.', code: 'Comma', shiftKey: true })) === true);
+  check('⌘. : AZERTY, key rapportée sans Maj (« ; », code Comma, Maj tenu)', stop(ev({ key: ';', code: 'Comma', shiftKey: true })) === true);
+  check('⌘. : sans ⌘, rien', stop(ev({ key: '.', code: 'Period', metaKey: false })) === false);
+  check(
+    '⌘. : avec Ctrl ou Alt, rien',
+    stop(ev({ key: '.', code: 'Period', ctrlKey: true })) === false && stop(ev({ key: '.', code: 'Period', altKey: true })) === false,
+  );
+  check('⌘, (QWERTY) ne l’est pas', stop(ev({ key: ',', code: 'Comma' })) === false);
+  check(
+    '⌘⇧, (QWERTY, « < ») ne l’est pas',
+    stop(ev({ key: '<', code: 'Comma', shiftKey: true })) === false && stop(ev({ key: ',', code: 'Comma', shiftKey: true })) === false,
+  );
+  check('⌘; (AZERTY sans Maj, la virgule) ne l’est pas', stop(ev({ key: ';', code: 'Comma' })) === false);
+  check('⌘⇧; (QWERTY, « : ») ne l’est pas', stop(ev({ key: ':', code: 'Semicolon', shiftKey: true })) === false);
+  check('⌘↵ n’est pas ⌘.', stop(ev({ key: 'Enter', code: 'Enter' })) === false);
+}
 
 // --- 0. Dégradés de défilement : reste-t-il du contenu avant / après ? --------
 {
@@ -387,7 +410,7 @@ check('relancer un lot sans ID : par son nom', r3.parent_monday_id === null && r
   check('la coquille : le bandeau traduit le refus', /errorMessage\(/.test(shell) && !/error\.message/.test(read(path.join(P, 'popover.html'))));
   check('la coquille : Réessayer suit retryable', /store\.retryable\(\)/.test(read(path.join(P, 'popover.html'))));
   check('Lancer : les erreurs de champ sont traduites', /errorMessage\(/.test(read(path.join(P, 'start-view.ts'))));
-  check('la coquille : ⌘↵ et ⌘.', /metaKey/.test(shell) && /'Enter'/.test(shell) && /'\.'/.test(shell));
+  check('la coquille : ⌘↵ et ⌘.', /metaKey/.test(shell) && /'Enter'/.test(shell) && /isStopShortcut\(event\)/.test(shell));
   check('la coquille : plus de mesure de hauteur (la fenêtre a une hauteur fixe)', !/ResizeObserver|setPopoverHeight/.test(shell));
   const shellCss = read(path.join(P, 'popover.scss'));
   check('la coquille : hauteur de la fenêtre, sans valeur en dur', /height:\s*100vh/.test(shellCss) && !/\b560px/.test(shellCss));

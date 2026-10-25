@@ -10,6 +10,7 @@ import { PopoverHeader } from '@app/ui';
 import { ErrorBanner } from './error-banner';
 import { formatDayHeader } from './logic/clock';
 import { errorField, errorMessage } from './logic/errors';
+import { isStopShortcut } from './logic/shortcuts';
 import { lotTitle, quitSummary } from './logic/view';
 import { QuitDialog } from './quit-dialog';
 import { RunningView } from './running-view';
@@ -117,7 +118,7 @@ export class Popover {
     if (event.key === 'Enter' && (view === 'start' || view === 'switch')) {
       event.preventDefault();
       void (view === 'start' ? this.store.start() : this.store.switchLot());
-    } else if (event.key === '.' && view !== 'start') {
+    } else if (isStopShortcut(event) && view !== 'start') {
       event.preventDefault();
       void this.store.stop();
     }
