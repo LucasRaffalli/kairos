@@ -6,7 +6,25 @@ Chronomètre de barre de menus pour macOS. Kairos mesure le temps par **tâche p
 
 La conception complète (pourquoi, concept, utilisation, cahier des charges, technique, design) est dans la page Notion « Kairos ». Les maquettes sont dans le fichier Figma [Kairos](https://www.figma.com/design/st5ct8bxzDkzwnY1UEH1YS).
 
-**État : étape 0 (le socle).** Une icône dans la barre de menus et un popover vide aux couleurs de l'app ; le chronomètre arrive aux étapes suivantes. L'icône de l'app est **provisoire** (un aplat Iris et le glyphe blanc).
+**État : étape 2a (le chrono dans l'app).** L'icône de la barre de menus ouvre un popover qui lance, change, met en pause et arrête le chronomètre, comme la ligne de commande et Claude. La journée (modifier, clôturer), les réglages et les notifications arrivent en 2b à 2d. L'icône de l'app est **provisoire** (un aplat Iris et le glyphe blanc).
+
+## L'app (barre de menus)
+
+Cliquer sur l'icône ouvre le popover. Il suit la base en direct : un `kairos start` tapé dans un terminal, ou un lot lancé par Claude, y apparaît en moins de 2 secondes, avec « Lancé par … à … · dossier ».
+
+Trois vues, selon l'état :
+
+- **Lancer** (rien en cours) : trois étapes (tâche parent, sous-tâche, début), les parents récents, les puces de sous-tâche, un résumé « Les heures iront sur … » et le bouton **Lancer**. Dessous, « Reprendre » relance un lot récent en un clic.
+- **Minuteur** (un lot tourne ou est en pause) : le chrono `HH:MM:SS`, le nom du lot, sa sous-tâche, **Arrêter**, **Pause** (ou **Reprendre**) et ⇄ pour changer de lot ; en dessous, la liste du jour en lecture seule.
+- **Changer de lot** : le même formulaire, avec un rappel du lot courant qui s'arrête au changement.
+
+L'icône affiche la durée du lot en cours en `H:MM` (sans secondes), « Pause · H:MM » en pause, rien au repos.
+
+**Raccourcis** : ⌘↵ lance (ou change de lot), ⌘. arrête, Échap ferme le popover. ⌘Q avec un lot en cours demande s'il faut garder le chrono.
+
+**Aucune action ne ferme le popover** : lancer, pause, reprise, arrêt et changement de lot le laissent ouvert. Seuls Échap et la perte du focus le ferment. Si la base est verrouillée par un autre programme, un bandeau l'indique avec un bouton **Réessayer**, et la dernière vue connue reste affichée en grisé. Une seconde instance de l'app se ferme aussitôt et montre la première.
+
+**À venir** : 2b la journée (modifier, ajouter, supprimer une entrée, clôturer, le texte à saisir dans Monday) ; 2c les réglages (engrenage, raccourcis globaux, parents épinglés, premier lancement) ; 2d la minuterie de fin, les absences et les notifications.
 
 ## Utiliser en ligne de commande
 
