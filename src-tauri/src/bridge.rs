@@ -53,6 +53,11 @@ pub struct Snapshot {
     pub home: String,
 }
 
+/// Bornes de `at` : 1970-01-01 et 2100-01-01 (UTC). Hors de cette plage le cœur ne sait plus
+/// calculer le jour local ; les bornes le font répondre `too_old` ou `in_future`.
+const MIN_AT: i64 = 0;
+const MAX_AT: i64 = 4_102_444_800;
+
 /// Un lancement demandé par l'interface (aussi pour `switch`). `at` : secondes, calculées par
 /// l'interface depuis « HH:MM ».
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -75,7 +80,7 @@ impl From<StartRequest> for StartArgs {
             name: request.name,
             subtask: request.subtask,
             subtask_monday_id: request.subtask_monday_id,
-            at: request.at,
+            at: request.at.map(|at| at.clamp(MIN_AT, MAX_AT)),
             source: Source::Manual,
             workdir: None,
         }
@@ -409,6 +414,33 @@ mod tests {
         .unwrap_err();
         assert_eq!(refused.code, "in_future");
         assert!(refused.message.contains("dans le futur"));
+    }
+
+    #[test]
+    fn an_extreme_start_time_is_refused_by_the_core_instead_of_panicking() {
+        let (k, _d) = kairos();
+        let at = |seconds: i64| {
+            start(
+                &k,
+                StartRequest {
+                    at: Some(seconds),
+                    ..request("12406850311")
+                },
+            )
+            .unwrap_err()
+            .code
+        };
+        assert_eq!(at(i64::MIN), "too_old");
+        assert_eq!(at(i64::MAX), "in_future");
+    }
+
+    #[test]
+    fn a_reasonable_start_time_is_not_altered() {
+        let args = StartArgs::from(StartRequest {
+            at: Some(T9 - 600),
+            ..StartRequest::default()
+        });
+        assert_eq!(args.at, Some(T9 - 600));
     }
 
     #[test]

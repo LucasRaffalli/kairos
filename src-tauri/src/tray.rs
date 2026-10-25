@@ -121,22 +121,42 @@ pub fn show_popover(app: &AppHandle) {
     let _ = window.set_focus();
 }
 
+/// Ce que « Quitter Kairos » fait d'après l'état du cœur.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuitDecision {
+    /// Quitter tout de suite.
+    Exit,
+    /// Un lot tourne : ouvrir le popover et demander quoi en faire.
+    Ask,
+}
+
+/// Seul un lot en cours demande confirmation. Une base illisible (verrouillée, trop récente)
+/// ne bloque pas la sortie : le dialogue n'aurait aucun résumé à montrer, et un lot ouvert reste
+/// compté depuis son heure de départ, rien n'est perdu.
+pub fn quit_decision(status: &bridge::BridgeResult<Status>) -> QuitDecision {
+    match status {
+        Ok(status) if bridge::lot_is_running(status) => QuitDecision::Ask,
+        _ => QuitDecision::Exit,
+    }
+}
+
 /// « Quitter Kairos » (menu de l'icône ou ⌘Q) : sans lot en cours, l'app quitte ; avec un lot
 /// en cours, le popover s'ouvre et l'interface affiche le dialogue.
 pub fn request_quit(app: &AppHandle) {
     let app = app.clone();
     // Ouvrir la base peut attendre un verrou : jamais sur le fil principal.
     std::thread::spawn(move || {
-        let running = bridge::open()
-            .and_then(|k| Ok(k.status()?))
-            .map(|status| bridge::lot_is_running(&status));
-        if let Ok(false) = running {
-            exit_when_idle(&app);
-            return;
+        // D'abord laisser finir les actions en vol : un `start` en cours serait lu comme « rien
+        // en cours », et l'app quitterait sans dialogue.
+        app.state::<InFlight>().wait_idle(QUIT_WAIT);
+        let status = bridge::open().and_then(|k| Ok(k.status()?));
+        match quit_decision(&status) {
+            QuitDecision::Exit => exit_when_idle(&app),
+            QuitDecision::Ask => {
+                show_popover(&app);
+                let _ = app.emit(QUIT_REQUESTED, ());
+            }
         }
-        // Un lot tourne, ou la base ne répond pas : on demande plutôt que de deviner.
-        show_popover(&app);
-        let _ = app.emit(QUIT_REQUESTED, ());
     });
 }
 
@@ -344,6 +364,8 @@ fn place_sized(window: &WebviewWindow, tray_rect: tauri::Rect, popover: Size) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kairos_core::error::Error;
+    use kairos_core::model::LotView;
 
     #[test]
     fn a_visible_popover_is_hidden_by_a_click() {
@@ -371,6 +393,56 @@ mod tests {
             popover_reaction(PopoverEvent::LostFocus),
             PopoverReaction::HideAfterBlur
         );
+    }
+
+    #[test]
+    fn a_running_lot_asks_before_quitting() {
+        assert_eq!(quit_decision(&Ok(running())), QuitDecision::Ask);
+    }
+
+    #[test]
+    fn nothing_running_or_a_pause_quits_at_once() {
+        assert_eq!(quit_decision(&Ok(Status::Idle)), QuitDecision::Exit);
+        let paused = Status::Paused {
+            lot: lot(),
+            since: 0,
+            duration: 60,
+            launched_by: None,
+            workdir: None,
+        };
+        assert_eq!(quit_decision(&Ok(paused)), QuitDecision::Exit);
+    }
+
+    #[test]
+    fn an_unreadable_database_still_quits() {
+        // Le dialogue n'aurait pas de résumé à montrer : un lot ouvert reste compté depuis son
+        // heure de départ, rien n'est perdu.
+        for error in [Error::DbUnavailable, Error::DbNewer] {
+            let status = Err(bridge::BridgeError::from(error));
+            assert_eq!(quit_decision(&status), QuitDecision::Exit);
+        }
+    }
+
+    fn lot() -> LotView {
+        LotView {
+            id: 1,
+            parent_monday_id: Some("1".into()),
+            parent_label: None,
+            subtask: None,
+            subtask_monday_id: None,
+            name: None,
+        }
+    }
+
+    fn running() -> Status {
+        Status::Running {
+            lot: lot(),
+            since: 0,
+            duration: 0,
+            today_total: 0,
+            launched_by: None,
+            workdir: None,
+        }
     }
 
     #[test]
