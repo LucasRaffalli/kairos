@@ -16,10 +16,17 @@
   font: inherit;
   font-size: var(--font-size-2xs);
   cursor: pointer;
-  transition: border-color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
 
   &:hover {
     border-color: var(--color-border-strong);
+    background: var(--color-bg-raised);
+  }
+
+  &:active {
+    background: var(--color-bg-sunken);
   }
 
   &:focus-visible {

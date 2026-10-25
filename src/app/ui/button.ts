@@ -14,7 +14,7 @@ export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
   template: `
     <button type="button" [class]="'btn ' + variant()" [disabled]="disabled()" [attr.aria-label]="ariaLabel()" (click)="pressed.emit()">
       @if (icon(); as name) {
-        <k-icon [name]="name" />
+        <k-icon [name]="name" [attr.data-icon]="name" />
       }
       <span class="label"><ng-content /></span>
       @if (kbd(); as keys) {

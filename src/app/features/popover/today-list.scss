@@ -29,9 +29,19 @@ k-section-title {
   gap: var(--space-sm);
   padding: 7px var(--space-xs);
   border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+
+  // Survol : la ligne se détache (lecture seule en 2a ; « modifier » arrive en 2b).
+  &:hover {
+    background: var(--color-bg-surface);
+  }
 
   &.open {
     background: var(--color-bg-surface);
+
+    &:hover {
+      background: var(--color-bg-raised);
+    }
 
     .duration {
       color: var(--color-text-success);

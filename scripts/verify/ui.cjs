@@ -246,6 +246,50 @@ const src = (name, ext) => (read(path.join(UI, `${name}.${ext}`)) ?? '').replace
 }
 
 // Chaque composant du dossier doit être connu de ce contrôle.
+// Les boutons de la maquette (245:348) : effets et états de chaque variante, définis par des tokens.
+{
+  const button = (read(path.join(UI, 'button.scss')) ?? '').replace(/^\s*\/\/.*$/gm, '');
+  const base = read(path.join(REPO, 'src', 'styles', '_base.scss')) ?? '';
+  for (const token of [
+    '--shadow-button',
+    '--shadow-button-hover',
+    '--shadow-button-active',
+    '--glow-button',
+    '--glow-button-hover',
+    '--glow-button-active',
+    '--surface-kbd-on-accent',
+  ]) {
+    check(`token ${token} défini`, new RegExp(`${token}:`).test(base));
+  }
+  const block = (name) => button.match(new RegExp(`\\.${name}\\s*\\{([\\s\\S]*?)\n\\}`))?.[1] ?? '';
+  const primary = block('primary');
+  check('primaire : ombre portée et lueur intérieure', /var\(--glow-button\)/.test(primary) && /var\(--shadow-button\)/.test(primary));
+  check('primaire : survol renforcé, appui écrasé', /:hover[\s\S]*--shadow-button-hover/.test(primary) && /:active[\s\S]*--glow-button-active/.test(primary));
+  for (const variant of ['primary', 'danger', 'secondary', 'ghost']) {
+    const css = block(variant);
+    check(`${variant} : survol et appui`, /:hover:not\(:disabled\)/.test(css) && /:active:not\(:disabled\)/.test(css));
+  }
+  check(
+    'bouton : anneau de focus clavier, inactif, transition courte',
+    /:focus-visible/.test(button) && /:disabled/.test(button) && /box-shadow var\(--transition-fast\)/.test(button),
+  );
+  check('bouton : puce du raccourci blanc translucide sur les boutons pleins', /\.primary kbd[\s\S]*--surface-kbd-on-accent/.test(button));
+  check('mouvement réduit : les transitions s’éteignent', /prefers-reduced-motion: reduce[\s\S]*--transition-fast: 0ms/.test(base));
+  for (const name of ['chip', 'recent-pill', 'quick-resume']) {
+    const css = read(path.join(UI, `${name}.scss`)) ?? '';
+    check(`${name} : survol, appui, focus clavier`, /:hover/.test(css) && /:active/.test(css) && /:focus-visible/.test(css));
+  }
+  check(
+    'liste du jour : survol des lignes',
+    /\.row\s*\{[\s\S]*&:hover/.test(read(path.join(REPO, 'src', 'app', 'features', 'popover', 'today-list.scss')) ?? ''),
+  );
+  const icon = read(path.join(UI, 'icon.ts')) ?? '';
+  check(
+    'icônes : play, stop, pause, échange à la géométrie de la maquette',
+    ['0 0 15 15', '0 0 14 14', '0 0 16 16'].every((vb) => icon.includes(`viewBox="${vb}"`)) && /M5 3\.4375 11\.875 7\.5/.test(icon),
+  );
+}
+
 // Le fondu des zones qui défilent : une directive (pas un composant) et sa logique pure.
 const fade = read(path.join(UI, 'scroll-fade.ts'));
 check('scroll-fade.ts existe, exporté par index.ts', fade !== null && index !== null && index.includes("./scroll-fade'"));

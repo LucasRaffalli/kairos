@@ -19,6 +19,7 @@
   transition:
     background var(--transition-fast),
     border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
     opacity var(--transition-fast);
 
   &:focus-visible {
@@ -39,16 +40,36 @@
   }
 }
 
+.btn k-icon {
+  font-size: var(--font-size-icon);
+
+  // Les tailles de la maquette : 14 px pour la pause, 16 px pour l'échange.
+  &[data-icon='pause'] {
+    font-size: var(--font-size-icon-sm);
+  }
+
+  &[data-icon='swap'] {
+    font-size: var(--font-size-icon-lg);
+  }
+}
+
 .label:empty {
   display: none;
 }
 
+// Le bouton plein de la maquette : ombre portée et lueur intérieure (inactif : seulement l'opacité).
 .primary {
   background: var(--color-accent-fill);
+  box-shadow: var(--glow-button), var(--shadow-button);
   color: var(--color-text-on-accent);
 
   &:hover:not(:disabled) {
     background: var(--color-accent-fill-hover);
+    box-shadow: var(--glow-button-hover), var(--shadow-button-hover);
+  }
+
+  &:active:not(:disabled) {
+    box-shadow: var(--glow-button-active), var(--shadow-button-active);
   }
 }
 
@@ -58,6 +79,10 @@
 
   &:hover:not(:disabled) {
     background: color-mix(in srgb, var(--color-status-danger-fill) 85%, black);
+  }
+
+  &:active:not(:disabled) {
+    background: color-mix(in srgb, var(--color-status-danger-fill) 72%, black);
   }
 }
 
@@ -71,6 +96,10 @@
     background: var(--color-bg-raised);
     border-color: var(--color-border-strong);
   }
+
+  &:active:not(:disabled) {
+    background: var(--color-bg-sunken);
+  }
 }
 
 .ghost {
@@ -83,6 +112,16 @@
     background: var(--color-bg-surface);
     border-color: var(--color-border-strong);
   }
+
+  &:active:not(:disabled) {
+    background: var(--color-bg-raised);
+  }
+}
+
+// Sur un bouton plein, la puce est le blanc translucide de la maquette (le reste : teinte du texte).
+.primary kbd,
+.danger kbd {
+  background: var(--surface-kbd-on-accent);
 }
 
 kbd {

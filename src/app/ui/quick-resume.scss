@@ -25,6 +25,10 @@
     background: var(--color-bg-raised);
   }
 
+  &:active {
+    background: var(--color-bg-sunken);
+  }
+
   &:focus-visible {
     outline: 2px solid var(--color-accent-text);
     outline-offset: 2px;

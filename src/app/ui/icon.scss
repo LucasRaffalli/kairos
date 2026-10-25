@@ -8,6 +8,10 @@
 svg {
   width: 100%;
   height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 // Variante pleine (le triangle de « Reprendre », maquette 220:81).
