@@ -90,10 +90,11 @@ Après un essai en local, Lucas a choisi une **fenêtre qui reste ouverte** à l
 - Elle ne se ferme plus à la perte du focus. Seuls le bouton rouge, Échap, ⌘W (« Fermer la fenêtre » du menu de l'app, qui masque) et un clic sur l'icône quand elle est au premier plan la rangent. Aucune action du chronomètre ne la ferme.
 - Clic sur l'icône : fenêtre rangée, on l'affiche ; visible mais derrière d'autres fenêtres, on la ramène devant ; visible et au premier plan, on la range.
 - Position : centrée sous l'icône au tout premier affichage, puis gardée en mémoire pour la session (rien sur disque). Un changement de hauteur garde le bord supérieur ; la fenêtre n'est remontée que si elle sortirait de l'écran par le bas.
+- Le titre de l'icône affiche les secondes (`H:MM:SS`), à la demande de Lucas : une durée à la minute donnait l'impression d'un compteur bloqué. Le réglage « Durée dans la barre de menus » (2c) pourra l'adapter.
 
 ## La barre de menus
 
-Le titre à côté de l'icône : la durée du lot en cours en `H:MM` (sans secondes, pour ne pas clignoter), « Pause · H:MM » en pause, rien au repos. Les glyphes précis par état et les états « journée à clôturer » et « à resaisir » sont lus sur les maquettes `231:115`, `231:140` ; ces deux derniers arrivent avec 2b. La couleur ne porte jamais seule un état : la forme et le texte aussi.
+Le titre à côté de l'icône : la durée du lot en cours en `H:MM:SS`, « Pause · H:MM:SS » en pause, rien au repos. Les glyphes précis par état et les états « journée à clôturer » et « à resaisir » sont lus sur les maquettes `231:115`, `231:140` ; ces deux derniers arrivent avec 2b. La couleur ne porte jamais seule un état : la forme et le texte aussi.
 
 ## Quitter
 

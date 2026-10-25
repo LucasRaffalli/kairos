@@ -151,20 +151,26 @@ pub fn stop_if_running<C: Clock>(k: &Kairos<C>) -> BridgeResult<()> {
     Ok(())
 }
 
-/// Le titre à côté de l'icône : « 0:42 » en cours, « Pause · 0:42 » en pause (la durée de la
-/// dernière entrée), rien au repos. Sans secondes, pour ne pas clignoter.
+/// Le titre à côté de l'icône : « 0:42:13 » en cours, « Pause · 0:42:13 » en pause (la durée de
+/// la dernière entrée), rien au repos. Les secondes y sont : une durée à la minute donnait
+/// l'impression d'un compteur bloqué.
 pub fn menu_title(status: &Status, now: i64) -> Option<String> {
     match status {
         Status::Idle => None,
-        Status::Running { since, .. } => Some(hours_minutes(now - since)),
-        Status::Paused { duration, .. } => Some(format!("Pause · {}", hours_minutes(*duration))),
+        Status::Running { since, .. } => Some(clock(now - since)),
+        Status::Paused { duration, .. } => Some(format!("Pause · {}", clock(*duration))),
     }
 }
 
-/// « H:MM » : heures sans zéro initial, minutes sur deux chiffres, secondes tronquées.
-fn hours_minutes(seconds: i64) -> String {
-    let minutes = seconds.max(0) / 60;
-    format!("{}:{:02}", minutes / 60, minutes % 60)
+/// « H:MM:SS » : heures sans zéro initial, minutes et secondes sur deux chiffres.
+fn clock(seconds: i64) -> String {
+    let seconds = seconds.max(0);
+    format!(
+        "{}:{:02}:{:02}",
+        seconds / 3600,
+        seconds / 60 % 60,
+        seconds % 60
+    )
 }
 
 /// Les commandes Tauri : chacune ouvre la base, appelle la fonction du pont et rend son résultat.
@@ -499,24 +505,26 @@ mod tests {
     #[test]
     fn menu_title_formats() {
         let at = |secs: i64| menu_title(&running(T9), T9 + secs);
-        assert_eq!(at(42 * 60).as_deref(), Some("0:42"));
-        assert_eq!(at(42 * 60 + 59).as_deref(), Some("0:42"));
-        assert_eq!(at(3600 + 5 * 60).as_deref(), Some("1:05"));
-        assert_eq!(at(12 * 3600).as_deref(), Some("12:00"));
-        assert_eq!(at(0).as_deref(), Some("0:00"));
+        assert_eq!(at(0).as_deref(), Some("0:00:00"));
+        assert_eq!(at(42).as_deref(), Some("0:00:42"));
+        assert_eq!(at(59).as_deref(), Some("0:00:59"));
+        assert_eq!(at(60).as_deref(), Some("0:01:00"));
+        assert_eq!(at(42 * 60 + 13).as_deref(), Some("0:42:13"));
+        assert_eq!(at(3600 + 5 * 60 + 9).as_deref(), Some("1:05:09"));
+        assert_eq!(at(12 * 3600).as_deref(), Some("12:00:00"));
         // Une horloge en retard sur le début ne donne pas une durée négative.
-        assert_eq!(at(-30).as_deref(), Some("0:00"));
+        assert_eq!(at(-30).as_deref(), Some("0:00:00"));
         let paused = Status::Paused {
             lot: lot(),
             since: T9,
-            duration: 42 * 60 + 10,
+            duration: 42 * 60 + 13,
             launched_by: None,
             workdir: None,
         };
         // En pause, la durée est celle de la dernière entrée : elle ne bouge plus.
         assert_eq!(
             menu_title(&paused, T9 + 7200).as_deref(),
-            Some("Pause · 0:42")
+            Some("Pause · 0:42:13")
         );
         assert_eq!(menu_title(&Status::Idle, T9), None);
     }

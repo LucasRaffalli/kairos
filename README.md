@@ -18,7 +18,7 @@ Trois vues, selon l'état :
 - **Minuteur** (un lot tourne ou est en pause) : le chrono `HH:MM:SS`, le nom du lot, sa sous-tâche, **Arrêter**, **Pause** (ou **Reprendre**) et ⇄ pour changer de lot ; en dessous, la liste du jour en lecture seule.
 - **Changer de lot** : le même formulaire, avec un rappel du lot courant qui s'arrête au changement.
 
-L'icône affiche la durée du lot en cours en `H:MM` (sans secondes), « Pause · H:MM » en pause, rien au repos.
+L'icône affiche la durée du lot en cours en `H:MM:SS`, « Pause · H:MM:SS » en pause, rien au repos.
 
 **Raccourcis** : ⌘↵ lance (ou change de lot), ⌘. arrête, Échap range la fenêtre. ⌘Q avec un lot en cours demande s'il faut garder le chrono.
 
