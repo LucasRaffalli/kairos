@@ -15,6 +15,8 @@ use kairos_core::model::{
 };
 use kairos_core::service::Kairos;
 
+use crate::inflight::InFlight;
+
 /// Attente maximale d'un verrou : au-delà, l'interface affiche l'erreur et « Réessayer ».
 pub const OPEN_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -138,6 +140,47 @@ pub fn resume<C: Clock>(k: &Kairos<C>) -> BridgeResult<StartedLot> {
     Ok(k.resume()?)
 }
 
+/// ⌘K puis P : met en pause un lot qui tourne, reprend un lot en pause, ne fait rien au repos.
+pub fn toggle_pause<C: Clock>(k: &Kairos<C>) -> BridgeResult<()> {
+    match k.status()? {
+        Status::Running { .. } => pause(k).map(|_| ()),
+        Status::Paused { .. } => resume(k).map(|_| ()),
+        Status::Idle => Ok(()),
+    }
+}
+
+/// ⌘K puis ↵ : relance le dernier lot, comme « Reprendre » (sans formulaire). Rend `false`, sans
+/// rien changer, si un lot tourne ou est en pause, ou s'il n'y a aucun lot récent.
+pub fn relaunch_last<C: Clock>(k: &Kairos<C>) -> BridgeResult<bool> {
+    if k.status()? != Status::Idle {
+        return Ok(false);
+    }
+    let Some(recent) = k.recent_lots(1)?.into_iter().next() else {
+        return Ok(false);
+    };
+    let lot = recent.lot;
+    let has_parent = lot.parent_monday_id.is_some();
+    let request = StartRequest {
+        parent_label: lot.parent_label.filter(|_| has_parent),
+        name: lot.name.filter(|_| !has_parent),
+        parent_monday_id: lot.parent_monday_id,
+        subtask: lot.subtask,
+        subtask_monday_id: lot.subtask_monday_id,
+        at: None,
+    };
+    start(k, request).map(|_| true)
+}
+
+/// Exécute une action sur la base hors des commandes Tauri (les raccourcis globaux) : comme
+/// elles, elle compte dans `InFlight`, pour que quitter attende qu'elle soit finie.
+pub fn perform<T>(
+    actions: &InFlight,
+    f: impl FnOnce(&Kairos<SystemClock>) -> BridgeResult<T>,
+) -> BridgeResult<T> {
+    let _guard = actions.begin();
+    f(&open()?)
+}
+
 /// Un lot compte le temps : quitter demande alors quoi en faire. Une pause ne compte rien.
 pub fn lot_is_running(status: &Status) -> bool {
     matches!(status, Status::Running { .. })
@@ -168,13 +211,27 @@ pub fn shows_seconds(setting: &str) -> bool {
     setting != "false"
 }
 
-/// L'état dont le titre a besoin, lu en une fois : le statut et le réglage des secondes.
-pub fn read_menu_state() -> BridgeResult<(Status, bool)> {
+/// Ce que le surveillant de l'icône lit dans la base : le statut et deux réglages internes.
+pub struct MenuState {
+    pub status: Status,
+    /// `menu_title_seconds` : le titre porte les secondes.
+    pub seconds: bool,
+    /// `global_shortcuts` : ⌘K est actif.
+    pub global_shortcuts: bool,
+}
+
+/// Le réglage `global_shortcuts` : seul « false » les désactive (une valeur invalide garde le défaut).
+pub fn shortcuts_enabled(setting: &str) -> bool {
+    setting != "false"
+}
+
+pub fn read_menu_state() -> BridgeResult<MenuState> {
     let k = open()?;
-    Ok((
-        k.status()?,
-        shows_seconds(&k.config_get("menu_title_seconds")?),
-    ))
+    Ok(MenuState {
+        status: k.status()?,
+        seconds: shows_seconds(&k.config_get("menu_title_seconds")?),
+        global_shortcuts: shortcuts_enabled(&k.config_get("global_shortcuts")?),
+    })
 }
 
 /// « H:MM:SS » ou, sans `seconds`, « H:MM » : heures sans zéro initial, le reste sur deux chiffres.
@@ -195,7 +252,6 @@ pub mod commands {
     use tauri::{AppHandle, State};
 
     use super::*;
-    use crate::inflight::InFlight;
 
     /// Ouvre la base et exécute `f` sur un fil de travail.
     async fn with_kairos<T, F>(f: F) -> BridgeResult<T>
@@ -570,6 +626,53 @@ mod tests {
         for invalid in ["", "oui", "False", "0"] {
             assert!(shows_seconds(invalid), "{invalid:?}");
         }
+    }
+
+    #[test]
+    fn toggle_pause_pauses_a_running_lot_and_resumes_a_paused_one() {
+        let (k, _d) = kairos();
+        start(&k, request("12406850311")).unwrap();
+        k.clock().advance(60);
+        toggle_pause(&k).unwrap();
+        assert!(matches!(k.status().unwrap(), Status::Paused { .. }));
+        k.clock().advance(60);
+        toggle_pause(&k).unwrap();
+        assert!(matches!(k.status().unwrap(), Status::Running { .. }));
+    }
+
+    #[test]
+    fn toggle_pause_does_nothing_when_nothing_runs() {
+        let (k, _d) = kairos();
+        toggle_pause(&k).unwrap();
+        assert_eq!(k.status().unwrap(), Status::Idle);
+    }
+
+    #[test]
+    fn relaunch_last_restarts_the_most_recent_lot_when_idle() {
+        let (k, _d) = kairos();
+        start(&k, request("12406850311")).unwrap();
+        k.clock().advance(600);
+        stop(&k).unwrap();
+        k.clock().advance(60);
+        assert!(relaunch_last(&k).unwrap());
+        match k.status().unwrap() {
+            Status::Running { lot, .. } => {
+                assert_eq!(lot.parent_monday_id.as_deref(), Some("12406850311"));
+                assert_eq!(lot.subtask.as_deref(), Some("Front"));
+            }
+            other => panic!("attendu : un lot en cours, obtenu {other:?}"),
+        }
+    }
+
+    #[test]
+    fn relaunch_last_does_nothing_without_a_recent_lot_or_when_a_lot_runs() {
+        let (k, _d) = kairos();
+        assert!(!relaunch_last(&k).unwrap());
+        assert_eq!(k.status().unwrap(), Status::Idle);
+        start(&k, request("12406850311")).unwrap();
+        let before = k.status().unwrap();
+        assert!(!relaunch_last(&k).unwrap());
+        assert_eq!(k.status().unwrap(), before);
     }
 
     #[test]

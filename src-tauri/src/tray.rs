@@ -13,6 +13,7 @@ use tauri::{
 };
 
 use crate::bridge;
+use crate::chord::{chord_title, Chords};
 use crate::inflight::{InFlight, QUIT_WAIT};
 use crate::placement::{fit_height, popover_position, Rect, Size};
 use crate::tray_font;
@@ -210,8 +211,10 @@ pub fn app_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 /// Le titre à côté de l'icône, tenu à jour par le fil de surveillance.
 #[derive(Default)]
 pub struct MenuTitle {
-    /// Le dernier état lu dans la base, avec le réglage des secondes.
-    status: Option<(Status, bool)>,
+    /// Le dernier état lu dans la base, avec les réglages internes.
+    state: Option<bridge::MenuState>,
+    /// Le réglage `global_shortcuts` déjà transmis au fil des raccourcis.
+    shortcuts_applied: Option<bool>,
     /// La minute (depuis l'epoch) de cette lecture.
     read_at_minute: Option<i64>,
     /// Le titre affiché, pour ne le poser que s'il change.
@@ -227,14 +230,23 @@ impl MenuTitle {
         if base_changed || self.read_at_minute != Some(minute) {
             // Base illisible : on garde le dernier titre et on réessaie à la seconde suivante.
             if let Ok(state) = bridge::read_menu_state() {
-                self.status = Some(state);
+                self.state = Some(state);
                 self.read_at_minute = Some(minute);
             }
         }
-        let Some((status, seconds)) = &self.status else {
+        let Some(state) = &self.state else {
             return;
         };
-        let title = bridge::menu_title(status, now, *seconds);
+        let chords = app.state::<Chords>();
+        // Allumer ou éteindre ⌘K quand le réglage change (et au premier relevé), sans relancer l'app.
+        if self.shortcuts_applied != Some(state.global_shortcuts) {
+            chords.enable(state.global_shortcuts);
+            self.shortcuts_applied = Some(state.global_shortcuts);
+        }
+        let title = chord_title(
+            bridge::menu_title(&state.status, now, state.seconds),
+            chords.is_armed(),
+        );
         if self.shown.as_ref() != Some(&title) {
             if let Some(tray) = app.tray_by_id(TRAY_ID) {
                 let _ = tray.set_title(title.as_deref());

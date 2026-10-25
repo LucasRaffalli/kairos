@@ -501,6 +501,16 @@ check('relancer un lot sans ID : par son nom', r3.parent_monday_id === null && r
     .reduce((n, f) => n + (rust(f).match(/\.hide\(\)/g) ?? []).length, 0);
   check('seuls ⌘W, le clic sur l’icône et la fermeture masquent la fenêtre', hides === 3, String(hides));
   check('⌘W du menu de l’app masque la fenêtre', /"cmd\+w"/.test(tray) && !/close_window\(/.test(tray));
+  const chordSrc = rust('chord.rs');
+  check(
+    'raccourcis globaux : plugin branché, ⌘K en super + K, pas d’unwrap',
+    /tauri_plugin_global_shortcut::Builder/.test(chordSrc) && /Modifiers::SUPER\), Code::KeyK/.test(chordSrc) && !/\.unwrap\(\)|\.expect\(/.test(chordSrc),
+  );
+  check(
+    'raccourcis globaux : touches physiques (S, ↵, P, Échap)',
+    ['KeyS', 'Enter', 'KeyP', 'Escape'].every((code) => chordSrc.includes(`Code::${code}`)),
+  );
+  check('raccourcis globaux : le plugin est enregistré dans lib.rs', /\.plugin\(shortcuts\)/.test(rust('lib.rs')));
   check('la fenêtre n’est jamais détruite', !/\.destroy\(|\.close\(\)/.test(tray));
 
   // Les clés de traduction utilisées par les vues existent en fr ET en en.

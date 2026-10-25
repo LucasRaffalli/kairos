@@ -503,10 +503,17 @@ impl<C: Clock> Kairos<C> {
                         "claude_autonomy vaut ask (Claude demande avant les actions difficiles à défaire) ou auto (il agit seul) ; reçu « {value} »"
                     )))
                 }
-                "menu_title_seconds" if ["true", "false"].contains(&value) => value.to_string(),
+                "menu_title_seconds" | "global_shortcuts" if ["true", "false"].contains(&value) => {
+                    value.to_string()
+                }
                 "menu_title_seconds" => {
                     return Err(Error::InvalidSetting(format!(
                         "menu_title_seconds vaut true (H:MM:SS dans la barre de menus) ou false (H:MM) ; reçu « {value} »"
+                    )))
+                }
+                "global_shortcuts" => {
+                    return Err(Error::InvalidSetting(format!(
+                        "global_shortcuts vaut true (raccourcis globaux ⌘K actifs) ou false (désactivés) ; reçu « {value} »"
                     )))
                 }
                 _ => clean_text(&Some(value.to_string()), "Le poste principal")?.ok_or_else(
@@ -1346,9 +1353,10 @@ fn totals(ctx: &Ctx, date: &str) -> Result<Totals> {
 
 fn check_setting_key(key: &str) -> Result<()> {
     match key {
-        "main_subtask" | "rounding_minutes" | "claude_autonomy" | "menu_title_seconds" => Ok(()),
+        "main_subtask" | "rounding_minutes" | "claude_autonomy" | "menu_title_seconds"
+        | "global_shortcuts" => Ok(()),
         other => Err(Error::InvalidSetting(format!(
-            "clé inconnue « {other} » (main_subtask, rounding_minutes, claude_autonomy ou menu_title_seconds)"
+            "clé inconnue « {other} » (main_subtask, rounding_minutes, claude_autonomy, menu_title_seconds ou global_shortcuts)"
         ))),
     }
 }
@@ -1356,7 +1364,7 @@ fn check_setting_key(key: &str) -> Result<()> {
 /// La valeur d'un réglage qui n'a pas encore de ligne dans la base.
 fn default_setting(key: &str) -> &'static str {
     match key {
-        "menu_title_seconds" => "true",
+        "menu_title_seconds" | "global_shortcuts" => "true",
         _ => "",
     }
 }

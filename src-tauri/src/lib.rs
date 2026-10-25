@@ -2,6 +2,7 @@
 //! `kairos-core`, où vivent toutes les règles métier.
 
 mod bridge;
+mod chord;
 mod inflight;
 mod placement;
 mod tray;
@@ -11,6 +12,7 @@ mod watcher;
 use tauri::{ActivationPolicy, Manager};
 
 pub fn run() {
+    let (shortcuts, chord_worker, chords) = chord::plugin();
     tauri::Builder::default()
         // En premier : une seconde instance se ferme aussitôt et montre la première.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -18,6 +20,8 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(shortcuts)
+        .manage(chords)
         .manage(tray::Placed::default())
         .manage(inflight::InFlight::default())
         // Remplace le menu par défaut de macOS : son « Quitter » (⌘Q) fermerait l'app sans
@@ -37,6 +41,7 @@ pub fn run() {
             // Une app de barre de menus : pas d'icône dans le Dock, pas de fenêtre au démarrage.
             app.set_activation_policy(ActivationPolicy::Accessory);
             tray::build(app.handle())?;
+            chord::spawn(app.handle().clone(), chord_worker)?;
             watcher::spawn(app.handle().clone())?;
 
             if let Some(window) = app.get_webview_window(tray::POPOVER) {
