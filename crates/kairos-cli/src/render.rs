@@ -12,7 +12,8 @@ pub enum Outcome {
     Resumed(StartedLot),
     Stopped(StoppedEntry),
     Paused(StoppedEntry),
-    Switched(SwitchResult),
+    // En boîte : le plus gros des résultats (deux lots), pour garder l'énumération compacte.
+    Switched(Box<SwitchResult>),
     Status(Status),
     Today(DayView),
     Report(Report),
@@ -105,6 +106,7 @@ pub fn text(outcome: &Outcome, offset: &dyn Fn(i64) -> i32) -> String {
             since,
             duration,
             today_total,
+            ..
         }) => {
             format!(
                 "En cours : {} depuis {} ({}). Aujourd'hui : {}.",
@@ -114,7 +116,7 @@ pub fn text(outcome: &Outcome, offset: &dyn Fn(i64) -> i32) -> String {
                 format_duration(*today_total)
             )
         }
-        Outcome::Status(Status::Paused { lot, since }) => format!(
+        Outcome::Status(Status::Paused { lot, since, .. }) => format!(
             "En pause : {} depuis {}.",
             lot.describe(),
             hm(*since, offset)

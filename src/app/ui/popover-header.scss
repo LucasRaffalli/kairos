@@ -1,0 +1,54 @@
+:host {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+
+  &::after {
+    content: '';
+    width: 14px;
+    height: 14px;
+    background: currentColor;
+    mask: url('/assets/glyph.svg') center / contain no-repeat;
+  }
+}
+
+.who {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-lg);
+  letter-spacing: -0.01em;
+}
+
+.subtitle {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  margin-left: auto;
+}

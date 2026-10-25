@@ -1,0 +1,75 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
+.label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+.box {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  transition: border-color var(--transition-fast);
+
+  // Le focus l'emporte sur le survol : sans `:not(:focus-within)`, ce sélecteur (plus spécifique que `.focus-ring`) masquerait le contour d'accent.
+  &:not(:focus-within):hover {
+    border-color: var(--color-border-strong);
+  }
+
+  // En erreur : le contour et l'anneau passent au danger, et le message l'écrit (la couleur ne dit pas tout).
+  &.is-invalid {
+    border-color: var(--color-status-danger);
+    box-shadow: 0 0 0 3px var(--color-status-danger-ring);
+  }
+
+  // Désactivé : atténué, sans survol.
+  &:has(.input:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-md);
+
+  &:disabled {
+    cursor: not-allowed;
+  }
+
+  &::placeholder {
+    color: var(--color-text-muted);
+  }
+
+  &.mono {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+  }
+}
+
+.message {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+
+  &.error {
+    color: var(--color-text-danger);
+  }
+}

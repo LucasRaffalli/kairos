@@ -1,0 +1,96 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+// Le chrono, le nom du lot et les boutons restent en place ; seule la liste du jour défile.
+.lot,
+.actions {
+  flex: none;
+}
+
+.lot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+// Le grand chrono : chasse fixe et chiffres tabulaires, pour qu'il ne tremble pas chaque seconde.
+.clock {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-display);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+
+  &.frozen {
+    color: var(--color-text-secondary);
+  }
+}
+
+.name {
+  overflow: hidden;
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticket {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+// Un long nom de sous-tâche ne chasse pas les ID de la ligne.
+.ticket k-badge {
+  flex: none;
+  max-width: 50%;
+}
+
+.ids {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+
+  &.paused {
+    color: var(--color-text-secondary);
+  }
+}
+
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-xs);
+
+  .stop {
+    flex: 1;
+  }
+}

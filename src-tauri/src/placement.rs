@@ -1,12 +1,18 @@
-//! Où poser le popover : centré sous l'icône de la barre de menus, mais
-//! toujours entièrement visible, même quand l'icône est au bord de l'écran ou
-//! sur un second écran. Tout en pixels physiques, sans rien demander à Tauri :
-//! c'est une fonction pure, donc testable.
+//! Où poser la fenêtre : au premier affichage, centrée sous l'icône de la barre de menus mais
+//! entièrement visible, même quand l'icône est au bord de l'écran ou sur un second écran ; ensuite
+//! elle reste où l'utilisateur l'a mise. Sa taille est fixe (`tauri.conf.json`), réduite seulement
+//! si l'écran est trop petit. Tout en pixels physiques, sans rien demander à Tauri : ce sont des fonctions
+//! pures, donc testables.
 
 /// Marge gardée entre le popover et le bord de l'écran.
 pub const EDGE_MARGIN: f64 = 8.0;
 /// Espace entre l'icône et le haut du popover.
 pub const GAP_BELOW_TRAY: f64 = 4.0;
+/// La fenêtre ne dépasse jamais la hauteur de l'écran moins cette marge (pixels logiques) : au-delà,
+/// son contenu défile.
+pub const SCREEN_HEIGHT_MARGIN: f64 = 80.0;
+/// Hauteur minimale de la fenêtre (pixels logiques), même sur un écran minuscule.
+pub const MIN_WINDOW_HEIGHT: f64 = 120.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point {
@@ -40,6 +46,17 @@ pub fn popover_position(tray: Rect, popover: Size, screen: Rect) -> Point {
     let y = below.clamp(screen.y, max_y);
 
     Point { x, y }
+}
+
+/// La hauteur de la fenêtre sur un écran de `screen_height` pixels (logiques tous les deux) : la
+/// hauteur fixe de `tauri.conf.json`, bornée à l'écran moins [`SCREEN_HEIGHT_MARGIN`] quand l'écran
+/// est trop petit pour elle.
+pub fn fit_height(height: f64, screen_height: f64) -> f64 {
+    let max = (screen_height - SCREEN_HEIGHT_MARGIN).max(MIN_WINDOW_HEIGHT);
+    if !height.is_finite() {
+        return MIN_WINDOW_HEIGHT;
+    }
+    height.clamp(MIN_WINDOW_HEIGHT, max)
 }
 
 #[cfg(test)]
@@ -150,5 +167,27 @@ mod tests {
             popover_position(tray_at(100.0), POPOVER, tiny).x,
             EDGE_MARGIN
         );
+    }
+
+    #[test]
+    fn the_fixed_height_fits_a_normal_screen_as_it_is() {
+        assert_eq!(fit_height(560.0, 900.0), 560.0);
+        let p = popover_position(
+            tray_at(700.0),
+            Size {
+                width: 340.0,
+                height: 560.0,
+            },
+            SCREEN,
+        );
+        assert!(p.y + 560.0 + EDGE_MARGIN <= 900.0);
+    }
+
+    #[test]
+    fn a_small_screen_bounds_the_height_to_the_usable_area() {
+        assert_eq!(fit_height(560.0, 600.0), 600.0 - SCREEN_HEIGHT_MARGIN);
+        assert_eq!(fit_height(560.0, 640.0), 560.0);
+        assert_eq!(fit_height(560.0, 150.0), MIN_WINDOW_HEIGHT);
+        assert_eq!(fit_height(f64::NAN, 900.0), MIN_WINDOW_HEIGHT);
     }
 }

@@ -6,7 +6,25 @@ Chronomètre de barre de menus pour macOS. Kairos mesure le temps par **tâche p
 
 La conception complète (pourquoi, concept, utilisation, cahier des charges, technique, design) est dans la page Notion « Kairos ». Les maquettes sont dans le fichier Figma [Kairos](https://www.figma.com/design/st5ct8bxzDkzwnY1UEH1YS).
 
-**État : étape 0 (le socle).** Une icône dans la barre de menus et un popover vide aux couleurs de l'app ; le chronomètre arrive aux étapes suivantes. L'icône de l'app est **provisoire** (un aplat Iris et le glyphe blanc).
+**État : étape 2a (le chrono dans l'app).** L'icône de la barre de menus ouvre la fenêtre de Kairos, qui lance, change, met en pause et arrête le chronomètre, comme la ligne de commande et Claude. La journée (modifier, clôturer), les réglages et les notifications arrivent en 2b à 2d. L'icône de l'app est **provisoire** (un aplat Iris et le glyphe blanc).
+
+## L'app (barre de menus)
+
+Cliquer sur l'icône ouvre la fenêtre de Kairos. Elle suit la base en direct : un `kairos start` tapé dans un terminal, ou un lot lancé par Claude, y apparaît en moins de 2 secondes, avec « Lancé par … à … · dossier ».
+
+Trois vues, selon l'état :
+
+- **Lancer** (rien en cours) : trois étapes (tâche parent, sous-tâche, début), les parents récents, les puces de sous-tâche, un résumé « Les heures iront sur … » et le bouton **Lancer**. Dessous, « Reprendre » relance un lot récent en un clic.
+- **Minuteur** (un lot tourne ou est en pause) : le chrono `HH:MM:SS`, le nom du lot, sa sous-tâche, **Arrêter**, **Pause** (ou **Reprendre**) et ⇄ pour changer de lot ; en dessous, la liste du jour en lecture seule.
+- **Changer de lot** : le même formulaire, avec un rappel du lot courant qui s'arrête au changement.
+
+L'icône affiche la durée du lot en cours en `H:MM:SS`, « Pause · H:MM:SS » en pause, rien au repos. Les chiffres sont de largeur fixe : le titre ne change pas de largeur d'une seconde à l'autre et ne décale pas les autres icônes de la barre de menus. Pour ne voir que `H:MM` (le titre ne change alors qu'à la minute) : `kairos config menu_title_seconds false` ; `true` (défaut) remet les secondes, sans relancer l'app.
+
+**Raccourcis** : ⌘↵ lance (ou change de lot), ⌘S arrête (⌘. aussi ; sur un clavier AZERTY, la touche du point demande Maj : ⌘⇧ + cette touche), Échap range la fenêtre. **Raccourcis globaux** (même quand Kairos n'est pas au premier plan) : ⌘K puis, dans les 2 secondes, S arrête le lot, ↵ relance le dernier lot (sans formulaire ; s'il n'y en a aucun, ou si un lot tourne déjà, la fenêtre s'ouvre sans rien changer), P met en pause ou reprend, Échap annule ; le titre de l'icône affiche « ⌘K… » pendant l'attente. Ces touches ne sont prises au système que pendant ces 2 secondes, mais ⌘K l'est en permanence, donc ⌘K ne marche plus dans les autres applications ; `kairos config global_shortcuts false` les désactive (pris en compte en quelques secondes, sans relancer l'app), `true` les remet. Si ⌘K est déjà pris par une autre app, Kairos continue sans ce raccourci. ⌘Q avec un lot en cours demande s'il faut garder le chrono.
+
+**La fenêtre se déplace et reste ouverte** (340 × 560 pt, hauteur fixe : l'en-tête et les boutons ne bougent pas, la liste du jour, le formulaire et « Reprendre » défilent, avec un fondu au bord où il reste du contenu) : on la glisse par la fine barre du haut, elle garde sa place et ne se ferme plus quand on clique ailleurs. Aucune action ne la range : lancer, pause, reprise, arrêt et changement de lot la laissent ouverte. Seuls le bouton rouge, ⌘W, Échap et un clic sur l'icône quand elle est au premier plan la rangent dans la barre de menus ; l'app continue de tourner. Les boutons jaune et vert sont grisés : sans icône dans le Dock, une fenêtre réduite n'aurait nulle part où aller, et la hauteur suit le contenu. Un clic sur l'icône quand elle est derrière d'autres fenêtres la ramène devant. Pour quitter, ⌘Q ou « Quitter Kairos » dans le menu de l'icône. Quand la base est illisible et la vue grisée, les raccourcis ⌘ sont ignorés. Si la base est verrouillée par un autre programme, un bandeau l'indique avec un bouton **Réessayer**, et la dernière vue connue reste affichée en grisé. Une seconde instance de l'app se ferme aussitôt et montre la première.
+
+**À venir** : 2b la journée (modifier, ajouter, supprimer une entrée, clôturer, le texte à saisir dans Monday) ; 2c les réglages (engrenage, raccourcis globaux, parents épinglés, premier lancement) ; 2d la minuterie de fin, les absences et les notifications.
 
 ## Utiliser en ligne de commande
 
@@ -53,7 +71,7 @@ Installé à la main par le DMG ? `brew install --cask --force lucasraffalli/kai
 claude mcp add kairos --scope user -- kairos mcp
 ```
 
-**Claude Desktop** : télécharger `https://release.lucasraffalli.com/kairos/Kairos_<version>.mcpb` (la version est celle de `latest.json`) et double-cliquer. L'extension embarque son propre binaire : elle ne dépend ni de Homebrew ni du PATH. Elle ne se met pas à jour toute seule : pour une nouvelle version, rouvrir le nouveau fichier. À défaut, l'ancienne méthode reste possible : entrée `kairos` sous `mcpServers` dans `~/Library/Application Support/Claude/claude_desktop_config.json`, avec `args: ["mcp"]` et `command: "/Applications/Kairos.app/Contents/MacOS/kairos"` (chemin absolu : Claude Desktop, lancé depuis le Dock, n'a pas le PATH de Homebrew), puis redémarrage.
+**Claude Desktop** : télécharger `https://release.lucasraffalli.com/kairos/Kairos_<version>.mcpb` (la version est celle de `latest.json`) et double-cliquer. L'extension embarque son propre binaire : elle ne dépend ni de Homebrew ni du PATH. Elle ne se met pas à jour toute seule : pour une nouvelle version, rouvrir le nouveau fichier. **Après une mise à jour de l'app, réinstaller l'extension** : la migration 3 de la base est voulue, mais l'ancienne extension embarque un binaire 0.2.0 qui refuse une base plus récente. Sans réinstallation, les outils de Claude Desktop répondent « base plus récente ». À défaut, l'ancienne méthode reste possible : entrée `kairos` sous `mcpServers` dans `~/Library/Application Support/Claude/claude_desktop_config.json`, avec `args: ["mcp"]` et `command: "/Applications/Kairos.app/Contents/MacOS/kairos"` (chemin absolu : Claude Desktop, lancé depuis le Dock, n'a pas le PATH de Homebrew), puis redémarrage.
 
 **Développement** (sans installer l'app) : `cargo build` puis `claude mcp add kairos --scope user -- "$PWD/target/debug/kairos" mcp`.
 
@@ -102,7 +120,7 @@ Seul `parent` est obligatoire. Kairos ne stocke jamais le texte de tes messages 
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `crates/kairos-core`    | Le cœur Rust : toutes les règles métier (étape 1). L'app et la ligne de commande l'utilisent, donc donnent les mêmes refus et les mêmes messages. |
 | `crates/kairos-cli`     | Le binaire `kairos` : ligne de commande, hooks de Claude Code, serveur MCP.                                                                       |
-| `src-tauri/`            | L'app Tauri v2 : icône de la barre de menus, popover, mises à jour.                                                                               |
+| `src-tauri/`            | L'app Tauri v2 : icône de la barre de menus, fenêtre, mises à jour.                                                                               |
 | `src/`                  | L'interface Angular 22 (zoneless, signaux, OnPush).                                                                                               |
 | `design/tokens.json`    | Les couleurs, exportées des variables Figma. `npm run tokens` en génère `src/styles/_tokens.scss`.                                                |
 | `infra/release-worker/` | Le Worker Cloudflare qui sert les releases depuis le bucket R2.                                                                                   |
@@ -157,3 +175,7 @@ brew install --cask lucasraffalli/kairos/kairos
 ```
 
 Le tap est le dépôt `LucasRaffalli/homebrew-kairos`, alimenté par `npm run deploy`.
+
+## Crédits
+
+Les icônes de l'interface viennent de [Lucide](https://lucide.dev) (licence ISC, avec des parties dérivées de Feather, licence MIT) : les tracés utilisés sont copiés dans `src/app/ui/icon.ts` et la licence est reprise dans `NOTICE`.

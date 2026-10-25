@@ -1,46 +1,64 @@
+// Une vraie fenêtre macOS opaque : le cadre et les coins viennent de la fenêtre native, pas d'ici.
+// Sa hauteur est fixe (celle de la fenêtre, dans `tauri.conf.json`) : le contenu ne la fait jamais
+// varier, les zones longues défilent dedans.
 :host {
   display: block;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--color-bg-popover);
+}
+
+// Sous la barre de titre en surimpression : les boutons natifs occupent les 28 premiers pixels.
+$titlebar-height: 28px;
+
+.frame {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
   width: 340px;
+  height: 100%;
+  padding: 0 var(--space-md) var(--space-sm);
   background: var(--color-bg-popover);
   color: var(--color-text-primary);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-lg);
-  padding: var(--space-md);
 }
 
-.head {
+// La zone de glissement. Sa marge négative annule exactement le `gap` qui la suit : le contenu
+// commence donc juste sous la barre, à 28 px du haut de la fenêtre.
+.titlebar {
+  flex: none;
+  height: $titlebar-height;
+  margin: 0 calc(var(--space-md) * -1) calc(var(--space-sm) * -1);
+}
+
+// L'en-tête et le bandeau restent à leur place.
+k-popover-header,
+app-error-banner {
+  flex: none;
+}
+
+// La vue prend la place restante ; elle la distribue à ses zones (voir chaque vue).
+.view {
   display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  transition: opacity var(--transition-base);
 
-.mark {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-default);
-  display: grid;
-  place-items: center;
-  color: var(--color-text-primary);
+  > * {
+    flex: 1;
+    min-height: 0;
+  }
 
-  &::after {
-    content: '';
-    width: 16px;
-    height: 16px;
-    background: currentColor;
-    mask: url('/assets/glyph.svg') center / contain no-repeat;
+  &.stale {
+    opacity: 0.45;
+    filter: grayscale(1);
   }
 }
 
-.who {
+// Le dialogue « Quitter » se centre dans la hauteur de la fenêtre.
+app-quit-dialog {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: 2px;
-}
-
-.meta {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--color-text-tertiary);
+  justify-content: center;
 }

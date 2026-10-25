@@ -119,6 +119,12 @@ fn execute(k: &Kairos<AppClock>, command: Command) -> Result<(Outcome, Offsets)>
     let time = |input: &str, date: &str| time_input::parse(input, date, &offset);
     let optional_time =
         |input: &Option<String>, date: &str| input.as_deref().map(|t| time(t, date)).transpose();
+    // Le dossier courant du processus : ce que la ligne de commande sait de l'extérieur.
+    let current_dir = || {
+        std::env::current_dir()
+            .ok()
+            .map(|dir| dir.to_string_lossy().into_owned())
+    };
     let start_args = |a: LotArgs| -> Result<StartArgs> {
         Ok(StartArgs {
             at: optional_time(&a.at, &today())?,
@@ -128,6 +134,7 @@ fn execute(k: &Kairos<AppClock>, command: Command) -> Result<(Outcome, Offsets)>
             subtask: a.subtask,
             subtask_monday_id: a.subtask_id,
             source: a.source.into(),
+            workdir: current_dir(),
         })
     };
 
@@ -136,7 +143,7 @@ fn execute(k: &Kairos<AppClock>, command: Command) -> Result<(Outcome, Offsets)>
         Command::Stop { at } => Outcome::Stopped(k.stop(optional_time(&at, &today())?)?),
         Command::Pause => Outcome::Paused(k.pause()?),
         Command::Resume => Outcome::Resumed(k.resume()?),
-        Command::Switch(a) => Outcome::Switched(k.switch_to(start_args(a)?)?),
+        Command::Switch(a) => Outcome::Switched(Box::new(k.switch_to(start_args(a)?)?)),
         Command::Status => Outcome::Status(k.status()?),
         Command::Today { date } => Outcome::Today(k.today(date.as_deref())?),
         Command::Report { date } => Outcome::Report(k.report(date.as_deref())?),
@@ -195,7 +202,7 @@ fn execute(k: &Kairos<AppClock>, command: Command) -> Result<(Outcome, Offsets)>
             Outcome::SubtaskId { parent, subtask }
         }
         Command::Recent { limit } => Outcome::Recent(k.recent_lots(limit)?),
-        Command::Back => Outcome::Switched(k.back(Source::Manual)?),
+        Command::Back => Outcome::Switched(Box::new(k.back(Source::Manual, current_dir())?)),
         Command::Label { id, name } => {
             let label = k.set_label(&id, &name)?;
             Outcome::Label { parent: id, label }

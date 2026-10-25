@@ -1,0 +1,140 @@
+:host {
+  display: inline-flex;
+}
+
+.btn {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  min-height: 40px;
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    opacity var(--transition-fast);
+
+  &:focus-visible {
+    outline: 2px solid var(--color-accent-text);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  // Une icône seule : un carré.
+  &:not(:has(.label:not(:empty))) {
+    flex: none;
+    width: 40px;
+    padding: 0;
+  }
+}
+
+// Les glyphes Lucide remplissent 18 à 20 cases sur 24 ; leurs tailles rendent le visuel de la maquette
+// (le carré d'arrêt de 7,5 px, le triangle de 7 px, les barres de pause, la double flèche de 11 px).
+.btn k-icon {
+  font-size: var(--font-size-icon);
+
+  &[data-icon='stop'] {
+    font-size: var(--font-size-icon-xs);
+  }
+
+  &[data-icon='pause'] {
+    font-size: var(--font-size-icon-sm);
+  }
+
+  &[data-icon='swap'] {
+    font-size: var(--font-size-icon-lg);
+  }
+}
+
+.label:empty {
+  display: none;
+}
+
+// Le bouton plein de la maquette : ombre portée et lueur intérieure (inactif : seulement l'opacité).
+.primary {
+  background: var(--color-accent-fill);
+  box-shadow: var(--glow-button), var(--shadow-button);
+  color: var(--color-text-on-accent);
+
+  &:hover:not(:disabled) {
+    background: var(--color-accent-fill-hover);
+    box-shadow: var(--glow-button-hover), var(--shadow-button-hover);
+  }
+
+  &:active:not(:disabled) {
+    box-shadow: var(--glow-button-active), var(--shadow-button-active);
+  }
+}
+
+.danger {
+  background: var(--color-status-danger-fill);
+  color: var(--color-text-on-accent);
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-status-danger-fill) 85%, black);
+  }
+
+  &:active:not(:disabled) {
+    background: color-mix(in srgb, var(--color-status-danger-fill) 72%, black);
+  }
+}
+
+.secondary {
+  background: var(--color-bg-surface);
+  border-color: var(--color-border-default);
+  color: var(--color-text-primary);
+  font-weight: 600;
+
+  &:hover:not(:disabled) {
+    background: var(--color-bg-raised);
+    border-color: var(--color-border-strong);
+  }
+
+  &:active:not(:disabled) {
+    background: var(--color-bg-sunken);
+  }
+}
+
+.ghost {
+  background: transparent;
+  border-color: var(--color-border-default);
+  color: var(--color-text-emphasis);
+  font-weight: 600;
+
+  &:hover:not(:disabled) {
+    background: var(--color-bg-surface);
+    border-color: var(--color-border-strong);
+  }
+
+  &:active:not(:disabled) {
+    background: var(--color-bg-raised);
+  }
+}
+
+// Sur un bouton plein, la puce est le blanc translucide de la maquette (le reste : teinte du texte).
+.primary kbd,
+.danger kbd {
+  background: var(--surface-kbd-on-accent);
+}
+
+kbd {
+  padding: 1px var(--space-xs);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, currentColor 20%, transparent);
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  font-weight: 500;
+}

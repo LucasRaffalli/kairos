@@ -3,9 +3,25 @@
   --font-sans: 'Satoshi', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
 
+  // Échelle typographique des composants communs : les tailles de la maquette (8,5 à 15 px)
+  // ramenées à cinq crans.
+  --font-size-2xs: 9px;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-lg: 15px;
+  // Le grand chrono du minuteur.
+  --font-size-display: 40px;
+  // Les glyphes Lucide des boutons : la taille rendue d'une grille de 24, réglée sur la maquette 245:348.
+  --font-size-icon: 13px;
+  --font-size-icon-xs: 11px;
+  --font-size-icon-sm: 12px;
+  --font-size-icon-lg: 16px;
+
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;
+  --radius-full: 999px;
 
   --space-2xs: 4px;
   --space-xs: 8px;
@@ -16,6 +32,44 @@
 
   --transition-fast: 140ms ease;
   --transition-base: 220ms ease;
+
+  // Les effets du bouton primaire de la maquette (nœud 245:348) : l'ombre portée, et la lueur
+  // intérieure, un filet clair en haut. Le survol les renforce, l'appui les écrase.
+  --shadow-button: 0 6px 10px rgba(9, 24, 44, 0.5);
+  --shadow-button-hover: 0 8px 14px rgba(9, 24, 44, 0.55);
+  --shadow-button-active: 0 2px 4px rgba(9, 24, 44, 0.5);
+  --glow-button: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  --glow-button-hover: inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  --glow-button-active: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+  // La puce du raccourci (« ↵ », « ⌘S ») sur un bouton plein.
+  --surface-kbd-on-accent: rgba(255, 255, 255, 0.18);
+}
+
+// Les transitions s'éteignent pour qui demande moins de mouvement.
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-fast: 0ms;
+    --transition-base: 0ms;
+  }
+}
+
+// Le texte et les glyphes d'erreur. Le rouge `status-danger` n'atteint pas 4,5:1 sur le clair (environ 2,4:1) :
+// ce thème prend le rouge plein `status-danger-fill`, les deux autres gardent `status-danger`.
+// Le texte de succès (durée du lot en cours) : le vert `status-success` est le même sur le sombre et le clair, où il
+// tombe à 1,9:1 ; le clair le mêle à moitié au texte principal (5,4:1), en gardant une teinte verte.
+[data-theme='dark'] {
+  --color-text-danger: var(--color-status-danger);
+  --color-text-success: var(--color-status-success);
+}
+
+[data-theme='contrast'] {
+  --color-text-danger: var(--color-status-danger);
+  --color-text-success: var(--color-status-success);
+}
+
+[data-theme='light'] {
+  --color-text-danger: var(--color-status-danger-fill);
+  --color-text-success: color-mix(in srgb, var(--color-status-success) 50%, var(--color-text-primary));
 }
 
 * {
@@ -46,4 +100,52 @@ body {
 .focus-ring.is-invalid:focus-within {
   border-color: var(--color-status-danger);
   box-shadow: 0 0 0 3px var(--color-status-danger-ring);
+}
+
+// Les zones qui défilent : une barre de 4 px, discrète, à la couleur de bordure. Seulement les
+// pseudo-éléments WebKit : `scrollbar-width` et `scrollbar-color` les désactivent, et la barre
+// native, énorme, reviendrait (elle s'hérite aussi par les zones enfants).
+.scroll-x,
+.scroll-y {
+  &::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border-radius: var(--radius-full);
+    background: var(--color-border-default);
+  }
+}
+
+.scroll-y {
+  overflow-y: auto;
+}
+
+.scroll-x {
+  overflow-x: auto;
+}
+
+// Le fondu d'une zone qui défile (directive `kScrollFade`) : les bords s'effacent là où il reste
+// du contenu. Un masque ne dépend d'aucune couleur : `currentcolor` n'y sert que d'opaque.
+.k-fade-y {
+  mask-image: linear-gradient(to bottom, transparent, currentcolor var(--fade-start, 0px), currentcolor calc(100% - var(--fade-end, 0px)), transparent);
+}
+
+.k-fade-x {
+  mask-image: linear-gradient(to right, transparent, currentcolor var(--fade-start, 0px), currentcolor calc(100% - var(--fade-end, 0px)), transparent);
+}
+
+// Lu par les lecteurs d'écran, invisible à l'écran (état annoncé, durée lisible du chrono).
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

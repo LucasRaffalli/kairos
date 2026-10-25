@@ -1,0 +1,109 @@
+:host {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+k-section-title {
+  flex: none;
+}
+
+// Le titre « Aujourd'hui » reste en place ; la liste défile dessous.
+.rows {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 7px var(--space-xs);
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+
+  // Survol : la ligne se détache (lecture seule en 2a ; « modifier » arrive en 2b).
+  &:hover {
+    background: var(--color-bg-surface);
+  }
+
+  &.open {
+    background: var(--color-bg-surface);
+
+    &:hover {
+      background: var(--color-bg-raised);
+    }
+
+    .duration {
+      color: var(--color-text-success);
+    }
+  }
+}
+
+// La couleur du parent : six teintes, dans l'ordre de `parentColorIndex`.
+.swatch {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 0;
+  background: var(--color-icon-default);
+
+  &[data-color='0'] {
+    background: var(--color-project-blue);
+  }
+  &[data-color='1'] {
+    background: var(--color-project-coral);
+  }
+  &[data-color='2'] {
+    background: var(--color-project-jade);
+  }
+  &[data-color='3'] {
+    background: var(--color-project-pink);
+  }
+  &[data-color='4'] {
+    background: var(--color-status-warning);
+  }
+}
+
+.text {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.name,
+.meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.meta {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+}
+
+.duration {
+  flex: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}

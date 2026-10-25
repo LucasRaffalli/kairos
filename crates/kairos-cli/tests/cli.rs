@@ -31,6 +31,18 @@ impl Env {
     fn run(&self, args: &[&str]) -> Output {
         self.run_at(T9, args)
     }
+
+    /// Comme `run_at`, depuis ce dossier courant.
+    fn run_in(&self, dir: &std::path::Path, now: i64, args: &[&str]) -> Output {
+        Command::new(env!("CARGO_BIN_EXE_kairos"))
+            .args(args)
+            .current_dir(dir)
+            .env("KAIROS_DB", self.dir.path().join("kairos.db"))
+            .env("KAIROS_NOW", now.to_string())
+            .env("KAIROS_TZ_OFFSET", "0")
+            .output()
+            .expect("le binaire kairos se lance")
+    }
 }
 
 fn out(o: &Output) -> String {
@@ -489,4 +501,27 @@ fn label_echoes_the_name_as_stored() {
     assert!(out.contains("« Bundle »"), "{out}");
     let json = json(&ok(e.run(&["--json", "label", "111", "  Bundle v2  "])));
     assert_eq!(json["label"], "Bundle v2");
+}
+
+#[test]
+fn start_switch_and_back_record_the_current_directory() {
+    let e = Env::new();
+    let work = tempfile::tempdir().unwrap();
+    let work = work.path().canonicalize().unwrap();
+    let expected = work.to_str().unwrap();
+
+    ok(e.run_in(&work, T9, &["start", "--parent", "111"]));
+    let status = json(&ok(e.run_in(&work, T9, &["--json", "status"])));
+    assert_eq!(status["workdir"], expected);
+
+    let other = tempfile::tempdir().unwrap();
+    let other = other.path().canonicalize().unwrap();
+    ok(e.run_in(&other, T9 + 600, &["switch", "--parent", "222"]));
+    let status = json(&ok(e.run_in(&other, T9 + 600, &["--json", "status"])));
+    assert_eq!(status["workdir"], other.to_str().unwrap());
+
+    ok(e.run_in(&work, T9 + 1200, &["back"]));
+    let status = json(&ok(e.run_in(&work, T9 + 1200, &["--json", "status"])));
+    assert_eq!(status["lot"]["parent_monday_id"], "111");
+    assert_eq!(status["workdir"], expected);
 }

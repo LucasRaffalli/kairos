@@ -69,6 +69,8 @@ pub struct LotView {
     pub parent_monday_id: Option<String>,
     pub parent_label: Option<String>,
     pub subtask: Option<String>,
+    /// L'ID Monday de la sous-tâche, quand il est connu (posé au lancement ou par `set_subtask_id`).
+    pub subtask_monday_id: Option<String>,
     pub name: Option<String>,
 }
 
@@ -102,6 +104,10 @@ pub struct Entry {
     pub end: Option<i64>,
     pub removed: bool,
     pub note: Option<String>,
+    /// Qui a lancé l'entrée (vide pour une entrée ajoutée après coup ou d'avant la migration 3).
+    pub source: Option<Source>,
+    /// Le dossier de travail du lancement.
+    pub workdir: Option<String>,
 }
 
 /// Ce qu'il faut pour lancer un lot (aussi pour `switch`).
@@ -120,6 +126,8 @@ pub struct StartArgs {
     /// Heure de début, pour un lancement en retard (vide : maintenant).
     pub at: Option<i64>,
     pub source: Source,
+    /// Dossier de travail du lancement (nettoyé : jamais une erreur, au pire ignoré).
+    pub workdir: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -152,10 +160,17 @@ pub enum Status {
         since: i64,
         duration: i64,
         today_total: i64,
+        launched_by: Option<Source>,
+        workdir: Option<String>,
     },
     Paused {
         lot: LotView,
+        /// Début de la pause : la fin de la dernière entrée.
         since: i64,
+        /// Secondes de la dernière entrée, figées par la pause.
+        duration: i64,
+        launched_by: Option<Source>,
+        workdir: Option<String>,
     },
 }
 
@@ -257,6 +272,7 @@ mod tests {
             parent_monday_id: id.map(str::to_string),
             parent_label: None,
             subtask: sub.map(str::to_string),
+            subtask_monday_id: None,
             name: name.map(str::to_string),
         };
         assert_eq!(
@@ -287,6 +303,17 @@ pub enum KnownId {
     Unknown,
 }
 
+/// Les sous-tâches proposées pour un parent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SubtaskChoices {
+    /// Le poste principal (réglage `main_subtask`).
+    pub main: String,
+    /// Les sous-tâches de base, communes à tous les parents.
+    pub base: Vec<String>,
+    /// Les sous-tâches propres au parent demandé.
+    pub own: Vec<String>,
+}
+
 /// Un lot récent, avec ce qu'il faut pour le retrouver.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RecentLot {
@@ -297,4 +324,13 @@ pub struct RecentLot {
     pub today_total: i64,
     /// Le lot en cours ou en pause.
     pub current: bool,
+}
+
+/// Tout ce qu'il faut pour dessiner l'app, lu d'un coup (voir `Kairos::overview`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Overview {
+    pub status: Status,
+    pub today: DayView,
+    pub recent: Vec<RecentLot>,
+    pub choices: SubtaskChoices,
 }

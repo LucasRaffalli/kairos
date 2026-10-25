@@ -485,3 +485,13 @@ fn recent_and_back_over_the_wire() {
     );
     assert_eq!(labelled["saved"], true);
 }
+
+#[test]
+fn mcp_start_leaves_the_workdir_empty() {
+    let (_d, db) = temp_db();
+    let mut s = Session::open(&db, "claude-code");
+    s.tool("start", json!({ "parent": "1" }));
+    let (_, status) = s.tool("status", json!({}));
+    assert_eq!(status["state"], "running");
+    assert!(status["workdir"].is_null(), "{status}");
+}

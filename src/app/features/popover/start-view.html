@@ -1,0 +1,139 @@
+@if (current(); as lot) {
+  <section class="current">
+    <div class="current-text">
+      <strong class="ellipsis" [title]="lotTitle(lot)">{{ lotTitle(lot) }}</strong>
+      <span class="current-meta">{{ lot.parent_monday_id ? lot.parent_monday_id + ' · ' : '' }}{{ t()('switch.stops') }}</span>
+    </div>
+    <span class="current-clock" aria-hidden="true">{{ clock() }}</span>
+  </section>
+  <k-section-title [title]="t()('switch.form')" />
+}
+
+<div class="steps scroll-y" kScrollFade="y">
+  <section class="block">
+    <div class="head">
+      <k-section-title variant="step" [step]="1" [title]="t()('start.parent.title')" />
+      <p class="help">{{ t()('start.parent.help') }}</p>
+    </div>
+    <div class="pair">
+      <k-field
+        class="grow"
+        [label]="t()('start.parent.name')"
+        [placeholder]="t()('start.parent.namePlaceholder')"
+        [value]="form().parentName"
+        [error]="fieldError('parent-name')"
+        (valueChange)="patch({ parentName: $event })"
+        (submitted)="submit()"
+      />
+      <k-field
+        class="id"
+        [mono]="true"
+        [label]="t()('start.parent.id')"
+        [placeholder]="t()('start.parent.idPlaceholder')"
+        [value]="form().parentId"
+        [error]="fieldError('parent-id')"
+        (valueChange)="patch({ parentId: $event })"
+        (submitted)="submit()"
+      />
+    </div>
+    @if (recents().length) {
+      <div class="recents">
+        <span class="recents-label">{{ t()('start.recent') }}</span>
+        @for (parent of recents(); track parent.id) {
+          <k-recent-pill [id]="parent.id" [name]="parent.name" (chosen)="pickParent(parent)" />
+        }
+      </div>
+    }
+  </section>
+
+  <section class="block">
+    <div class="head">
+      <k-section-title variant="step" [step]="2" [title]="t()('start.subtask.title')" />
+      <p class="help">{{ t()('start.subtask.help') }}</p>
+    </div>
+    <div class="choices" role="group" [attr.aria-label]="t()('start.subtask.choices')">
+      <div class="chips" kScrollFade="x">
+        @for (chip of chips(); track chip) {
+          <k-chip [value]="chip" [selected]="selectedChip() === chip" (chosen)="pickChip($event)" />
+        }
+      </div>
+      <k-chip [dashed]="true" [value]="t()('start.subtask.other')" [selected]="selectedChip() === null" (chosen)="pickOther()" />
+    </div>
+    <div class="pair">
+      <k-field
+        #subtaskName
+        class="grow"
+        [label]="t()('start.subtask.name')"
+        [placeholder]="t()('start.subtask.namePlaceholder')"
+        [value]="form().subtask"
+        [error]="fieldError('subtask-name')"
+        (valueChange)="patch({ subtask: $event })"
+        (submitted)="submit()"
+      />
+      <k-field
+        class="id"
+        [mono]="true"
+        [label]="t()('start.subtask.id')"
+        [placeholder]="t()('start.subtask.idPlaceholder')"
+        [value]="form().subtaskId"
+        [error]="fieldError('subtask-id')"
+        (valueChange)="patch({ subtaskId: $event })"
+        (submitted)="submit()"
+      />
+    </div>
+    <p class="help">{{ t()('start.subtask.hint') }}</p>
+  </section>
+
+  <section class="block">
+    <div class="head">
+      <k-section-title variant="step" [step]="3" [title]="t()('start.time.title')" />
+      <p class="help">{{ t()('start.time.help') }}</p>
+    </div>
+    <div class="pair">
+      <k-field
+        class="half"
+        [mono]="true"
+        [label]="t()('start.time.start')"
+        placeholder="--:--"
+        [value]="form().time"
+        [error]="timeError()"
+        (valueChange)="patch({ time: $event })"
+        (submitted)="submit()"
+      />
+    </div>
+  </section>
+
+  <div class="summary" id="start-summary">
+    @let c = check();
+    <span class="muted">{{ t()('start.summary.goesTo') }}</span>
+    @if (!c.ok && c.reason === 'need-parent-or-name') {
+      <strong>{{ t()('start.summary.needParent') }}</strong>
+      <span class="muted">{{ t()('start.summary.needParentWhy') }}</span>
+    } @else {
+      <strong class="ellipsis" [title]="target()">{{ target() }}</strong>
+      <span class="muted">{{ c.ok ? t()('start.summary.free') : t()('start.summary.badTime') }}</span>
+    }
+  </div>
+</div>
+
+<div class="submit-row">
+  @if (current()) {
+    <k-button variant="ghost" (pressed)="store.closeSwitch()">{{ t()('switch.cancel') }}</k-button>
+  }
+  <k-button class="submit" variant="primary" icon="play" kbd="⌘↵" [disabled]="!check().ok || store.busy()" (pressed)="submit()">
+    {{ mode() === 'switch' ? t()('switch.submit') : t()('start.launch') }}
+  </k-button>
+</div>
+<p class="hint">
+  <k-icon name="term" />
+  {{ mode() === 'switch' ? t()('switch.hint') : t()('start.claudeHint') }}
+</p>
+
+@if (resumes().length) {
+  <k-section-title [title]="t()('start.resume')" />
+  <div class="resumes scroll-y" kScrollFade="y">
+    @for (lot of resumes(); track lot.id) {
+      <k-quick-resume [name]="lotTitle(lot)" [id]="lot.parent_monday_id" [subtask]="lot.subtask" (resumed)="resume(lot)" />
+    }
+  </div>
+}
