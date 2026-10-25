@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Capacités par défaut de Kairos",
   "windows": ["popover"],
-  "permissions": ["core:default", "core:window:allow-close", "updater:default", "process:default"]
+  "permissions": ["core:default", "core:window:allow-close", "updater:default", "process:allow-restart"]
 }
