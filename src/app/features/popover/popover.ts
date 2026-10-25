@@ -21,7 +21,7 @@ import { StartView } from './start-view';
  * l'état du cœur (`pickView`). Seule la coquille range la fenêtre, et seulement sur Échap : aucune
  * action ne la ferme, et perdre le focus non plus (elle reste ouverte, côté Rust). Sa hauteur est
  * fixe (celle de la fenêtre, `tauri.conf.json`) : l'en-tête et les boutons restent en place, et
- * seules les zones longues défilent. Elle porte les raccourcis ⌘↵ et ⌘. et montre le dialogue
+ * seules les zones longues défilent. Elle porte les raccourcis ⌘↵ (lancer) et ⌘S, ⌘. (arrêter) et montre le dialogue
  * « Quitter » quand le magasin l'ouvre.
  */
 @Component({

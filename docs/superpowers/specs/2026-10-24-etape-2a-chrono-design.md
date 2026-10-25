@@ -62,7 +62,7 @@ Trois vues dans le popover (340 px de large, reprises des maquettes `220:81`, `2
 
   Puis le récapitulatif « Les heures iront sur <nom> › <sous-tâche> · Chrono libre : jusqu'à ce que tu l'arrêtes », le bouton **Lancer** (⌘↵), la ligne « Ou depuis Claude : kairos start » et la liste **Reprendre** (les trois lots les plus récents, un clic les lance sur-le-champ).
 
-- **Minuteur lancé** (un lot tourne). Le chrono `HH:MM:SS`, le nom du lot, le badge de sous-tâche en capitales, « parent <ID> · sous-tâche <ID> », la ligne « Lancé par <qui> à <heure> · <dossier> » (« par toi » devient « Lancé à 13:34 » sans « par »), puis **Arrêter** (⌘.), **Pause** et ⇄ (ouvre « Changer de lot »). En dessous « AUJOURD'HUI · 3 h 54 » et la liste des entrées du jour, **en lecture seule** (modifier est en 2b) : un carré de la couleur du parent, le nom, « ID · sous-tâche · début → fin », la durée (celle de l'entrée en cours en vert).
+- **Minuteur lancé** (un lot tourne). Le chrono `HH:MM:SS`, le nom du lot, le badge de sous-tâche en capitales, « parent <ID> · sous-tâche <ID> », la ligne « Lancé par <qui> à <heure> · <dossier> » (« par toi » devient « Lancé à 13:34 » sans « par »), puis **Arrêter** (⌘S), **Pause** et ⇄ (ouvre « Changer de lot »). En dessous « AUJOURD'HUI · 3 h 54 » et la liste des entrées du jour, **en lecture seule** (modifier est en 2b) : un carré de la couleur du parent, le nom, « ID · sous-tâche · début → fin », la durée (celle de l'entrée en cours en vert).
 - **En pause** : le chrono figé, la mention « En pause depuis <heure> », **Reprendre** à la place de Pause ; mêmes boutons Arrêter et ⇄. (Le nœud Figma de cet état est à relever avant l'implémentation.)
 - **Changer de lot** : au-dessus du formulaire « Lancer », un rappel du lot en cours (nom, ID, « s'arrête au changement », chrono) ; le bouton s'appelle **Changer de lot** et la ligne dit « Le nouveau lot démarre à la même seconde ».
 - **Erreur** : un bandeau rouge sous l'en-tête avec le message du cœur et **Réessayer** (« Le lot n'a pas démarré : la base de Kairos est inaccessible… »). Les erreurs de champ du cœur (`invalid_monday_id`, `invalid_name`, `in_future`, `same_lot`…) s'affichent sous le champ concerné quand on peut le déterminer, sinon dans le bandeau.
@@ -75,7 +75,7 @@ La date de l'en-tête est celle de l'ordinateur. Tous les textes passent par `I1
 
 ## Raccourcis dans le popover
 
-⌘↵ lance (ou change de lot), ⌘. arrête, Échap ferme. Les raccourcis **globaux** (ouvrir depuis n'importe où, lancer, pause) sont en 2c.
+⌘↵ lance (ou change de lot), ⌘S arrête (⌘. et, sur AZERTY, ⌘⇧ + la touche du point aussi), Échap ferme. Les raccourcis **globaux** (ouvrir depuis n'importe où, lancer, pause) sont en 2c.
 
 ## Fenêtre
 
@@ -94,6 +94,7 @@ Après un essai en local, Lucas a choisi une **fenêtre qui reste ouverte** à l
 - Réglage interne `menu_title_seconds` (`true` par défaut, `false` pour `H:MM`), dans la table `settings` du cœur et modifiable par `kairos config menu_title_seconds <true|false>`. Sans ligne en base, la valeur est le défaut (aucune migration : les anciennes versions restent compatibles) ; une valeur invalide retombe sur le défaut côté app et est refusée par `config`. L'écran Réglages (2c) l'exposera.
 - **Hauteur fixe de 560 pt** pour toutes les vues (largeur 340 pt inchangée), au lieu de la hauteur qui suivait le contenu. Une seule source : `height` de la fenêtre dans `tauri.conf.json` ; le style prend `100vh`. Le premier affichage la ramène à l'écran moins 80 px sur un écran trop petit. L'en-tête et les boutons restent en place ; seules la liste du jour, le formulaire de lancement et « Reprendre » défilent. La commande `set_popover_height` et la mesure de hauteur côté interface sont supprimées.
 - Les zones qui défilent ont une barre fine de 4 px (pseudo-éléments WebKit seulement : `scrollbar-width` et `scrollbar-color` faisaient revenir la barre native, énorme) et un fondu (directive `kScrollFade`, masque) du côté où il reste du contenu.
+- **⌘S arrête le lot** (second raccourci, affiché sur le bouton « Arrêter ») : ⌘. demande Maj sur un clavier AZERTY et est aussi un raccourci système de macOS. Mêmes garde-fous que ⌘. : un lot tourne ou est en pause, pas de dialogue « Quitter » ouvert, vue non grisée ; ni Maj, ni Ctrl, ni Alt avec ⌘S.
 
 ## La barre de menus
 

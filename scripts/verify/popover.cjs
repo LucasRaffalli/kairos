@@ -74,6 +74,17 @@ const lib = bundle([
   check('⌘; (AZERTY sans Maj, la virgule) ne l’est pas', stop(ev({ key: ';', code: 'Comma' })) === false);
   check('⌘⇧; (QWERTY, « : ») ne l’est pas', stop(ev({ key: ':', code: 'Semicolon', shiftKey: true })) === false);
   check('⌘↵ n’est pas ⌘.', stop(ev({ key: 'Enter', code: 'Enter' })) === false);
+  check(
+    '⌘S arrête (QWERTY et AZERTY, majuscule verrouillée comprise)',
+    stop(ev({ key: 's', code: 'KeyS' })) === true && stop(ev({ key: 'S', code: 'KeyS' })) === true,
+  );
+  check(
+    '⌘⇧S, ⌃S, ⌥⌘S, S seul : non',
+    stop(ev({ key: 'S', code: 'KeyS', shiftKey: true })) === false &&
+      stop(ev({ key: 's', code: 'KeyS', metaKey: false, ctrlKey: true })) === false &&
+      stop(ev({ key: 's', code: 'KeyS', altKey: true })) === false &&
+      stop(ev({ key: 's', code: 'KeyS', metaKey: false })) === false,
+  );
 }
 
 // --- 0. Dégradés de défilement : reste-t-il du contenu avant / après ? --------

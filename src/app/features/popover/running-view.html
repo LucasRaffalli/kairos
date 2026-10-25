@@ -27,7 +27,7 @@
   </section>
 
   <div class="actions">
-    <k-button class="stop" variant="primary" icon="stop" kbd="⌘." [disabled]="store.busy()" (pressed)="store.stop()">{{ t()('running.stop') }}</k-button>
+    <k-button class="stop" variant="primary" icon="stop" kbd="⌘S" [disabled]="store.busy()" (pressed)="store.stop()">{{ t()('running.stop') }}</k-button>
     @if (s.state === 'paused') {
       <k-button variant="ghost" icon="play" [disabled]="store.busy()" (pressed)="store.resume()">{{ t()('running.resume') }}</k-button>
     } @else {

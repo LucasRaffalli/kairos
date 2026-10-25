@@ -28,7 +28,7 @@ export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 export class Button {
   readonly variant = input<ButtonVariant>('primary');
   readonly disabled = input(false);
-  /** Le raccourci affiché à droite, par exemple « ↵ » ou « ⌘. ». */
+  /** Le raccourci affiché à droite, par exemple « ↵ » ou « ⌘S ». */
   readonly kbd = input<string | null>(null);
   readonly icon = input<IconName | null>(null);
   /** Le nom accessible d'un bouton sans texte. */
