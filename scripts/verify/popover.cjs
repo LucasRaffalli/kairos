@@ -290,6 +290,32 @@ check('relancer un lot sans ID : par son nom', r3.parent_monday_id === null && r
   // Une classe de vue qui porte le nom d'une variante de composant (« .step ») s'applique aussi à son hôte.
   check('start-view.scss ne définit pas .step (classe de k-section-title)', !/^\.step\b/m.test(read(path.join(P, 'start-view.scss'))));
 
+  // Écarts relevés sur les maquettes (tâche 7).
+  const startCss = read(path.join(P, 'start-view.scss'));
+  // 220:81 : l'aide colle au titre d'étape (3 px), les champs viennent ensuite.
+  check(
+    'Lancer : chaque titre d’étape et son aide forment un en-tête',
+    (startHtml.match(/<div class="head">\s*<k-section-title variant="step"[^>]*\/>\s*<p class="help">/g) ?? []).length === 3,
+  );
+  check('Lancer : 3 px entre le titre d’étape et son aide', /\.head\s*\{[^}]*gap:\s*3px/.test(startCss));
+  // 220:81 : sous les puces, un indicateur de défilement de 3 px, curseur d'accent sur un rail de bordure.
+  const bar = startCss.match(/\.chips::-webkit-scrollbar\s*\{([^}]*)\}/);
+  check('Lancer : rail de défilement des puces de 3 px', bar !== null && /height:\s*3px/.test(bar[1]));
+  check(
+    'Lancer : curseur d’accent sur un rail de bordure',
+    /::-webkit-scrollbar-thumb\s*\{[^}]*background:\s*var\(--color-accent-text\)/.test(startCss) &&
+      /::-webkit-scrollbar-track\s*\{[^}]*background:\s*var\(--color-border-default\)/.test(startCss),
+  );
+  // 223:304 : le rappel du lot courant garde son nom et « s'arrête au changement » ; Annuler va à côté du bouton.
+  const current = startHtml.match(/<section class="current">([\s\S]*?)<\/section>/);
+  check('Changer de lot : le rappel ne porte pas de bouton', current !== null && !/<k-button/.test(current[1]));
+  check(
+    'Changer de lot : Annuler à côté du bouton principal',
+    /<div class="submit-row">[\s\S]*closeSwitch\(\)[\s\S]*class="submit"[\s\S]*<\/div>/.test(startHtml),
+  );
+  // long-names : le badge de sous-tâche ne chasse pas les ID de la ligne.
+  check('Minuteur : le badge de sous-tâche est plafonné', /\.ticket\s+k-badge\s*\{[^}]*max-width:\s*50%/.test(read(path.join(P, 'running-view.scss'))));
+
   // Les clés de traduction utilisées par les vues existent en fr ET en en.
   const keysOf = (file) => new Set([...read(path.join(REPO, 'src', 'app', 'lang', file)).matchAll(/^\s*'([\w.-]+)':/gm)].map((m) => m[1]));
   const fr = keysOf('fr.ts');

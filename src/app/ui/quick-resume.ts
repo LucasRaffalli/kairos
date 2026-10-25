@@ -8,7 +8,7 @@ import { Icon } from './icon';
   imports: [Icon],
   template: `
     <button type="button" class="resume" [title]="name() + (details() ? ' · ' + details() : '')" (click)="resumed.emit()">
-      <k-icon class="play" name="play" />
+      <k-icon class="play filled" name="play" />
       <span class="name">{{ name() }}</span>
       @if (details(); as text) {
         <span class="details">{{ text }}</span>

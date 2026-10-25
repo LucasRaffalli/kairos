@@ -31,16 +31,21 @@
 
 // Le texte et les glyphes d'erreur. Le rouge `status-danger` n'atteint pas 4,5:1 sur le clair (environ 2,4:1) :
 // ce thème prend le rouge plein `status-danger-fill`, les deux autres gardent `status-danger`.
+// Le texte de succès (durée du lot en cours) : le vert `status-success` est le même sur le sombre et le clair, où il
+// tombe à 1,9:1 ; le clair le mêle à moitié au texte principal (5,4:1), en gardant une teinte verte.
 [data-theme='dark'] {
   --color-text-danger: var(--color-status-danger);
+  --color-text-success: var(--color-status-success);
 }
 
 [data-theme='contrast'] {
   --color-text-danger: var(--color-status-danger);
+  --color-text-success: var(--color-status-success);
 }
 
 [data-theme='light'] {
   --color-text-danger: var(--color-status-danger-fill);
+  --color-text-success: color-mix(in srgb, var(--color-status-success) 50%, var(--color-text-primary));
 }
 
 * {

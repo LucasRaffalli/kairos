@@ -42,7 +42,14 @@
   min-width: 0;
 }
 
+// Un long nom de sous-tâche ne chasse pas les ID de la ligne.
+.ticket k-badge {
+  flex: none;
+  max-width: 50%;
+}
+
 .ids {
+  min-width: 0;
   overflow: hidden;
   color: var(--color-text-tertiary);
   font-family: var(--font-mono);

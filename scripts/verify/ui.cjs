@@ -194,6 +194,57 @@ const src = (name, ext) => (read(path.join(UI, `${name}.${ext}`)) ?? '').replace
   }
 }
 
+// Texte de succès (durée du lot en cours, liste du jour) : un token par thème, ≥ 4,5:1 sur la surface.
+// Le vert `status-success` est le même dans les thèmes sombre et clair : sur le clair, il tombe à 1,9:1.
+{
+  const defs = {};
+  for (const m of baseCss.matchAll(/\[data-theme='(\w+)'\]\s*\{([^}]*)\}/g)) {
+    const v = m[2].match(/--color-text-success:\s*([^;]+);/);
+    if (v) defs[m[1]] = v[1].trim();
+  }
+  check(
+    '_base.scss : --color-text-success défini pour dark, light et contrast',
+    ['dark', 'light', 'contrast'].every((t) => defs[t]),
+    JSON.stringify(defs),
+  );
+  const resolve = (p, value) => {
+    const plain = value?.match(/^var\(--color-([\w-]+)\)$/);
+    if (plain) return rgb(p[plain[1]] ?? '#ff00ff');
+    const mixed = value?.match(/^color-mix\(in srgb,\s*var\(--color-([\w-]+)\)\s*(\d+)%,\s*var\(--color-([\w-]+)\)\)$/);
+    if (mixed) return mix(rgb(p[mixed[1]]), rgb(p[mixed[3]]), +mixed[2]);
+    return rgb('#ff00ff');
+  };
+  const w = worst((p, th) => ratio(resolve(p, defs[th]), rgb(p['bg-surface'])));
+  check(`texte de succès sur la surface ≥ ${AA}:1 (pire cas ${w.toFixed(2)})`, w >= AA);
+  const today = (read(path.join(REPO, 'src', 'app', 'features', 'popover', 'today-list.scss')) ?? '').replace(/^\s*\/\/.*$/gm, '');
+  check(
+    'today-list : la durée en cours utilise --color-text-success',
+    /color:\s*var\(--color-text-success\)/.test(today) && !/--color-status-success/.test(today),
+  );
+}
+
+// Mesures des maquettes 220:81 et 220:179 (tâche 7) : hauteurs des contrôles, tailles et graisses de texte.
+{
+  const block = (css, selector) => {
+    const m = css.match(new RegExp(`(?:^|\\n)\\s*${selector}\\s*\\{([^}]*)\\}`));
+    return m ? m[1] : '';
+  };
+  const field = src('field', 'scss');
+  check('field : libellé en graisse moyenne (500)', /font-weight:\s*500/.test(block(field, '\\.label')));
+  check('field : champ de 40 px de haut', /min-height:\s*40px/.test(block(field, '\\.box')));
+  const btn = src('button', 'scss');
+  check('button : 40 px de haut', /min-height:\s*40px/.test(btn.slice(btn.indexOf('.btn {'))));
+  check('button : icône seule, un carré de 40 px', /&:not\(:has\(\.label:not\(:empty\)\)\)\s*\{[^}]*width:\s*40px/.test(btn));
+  check('chip : 30 px de haut', /min-height:\s*30px/.test(block(src('chip', 'scss'), '\\.chip')));
+  check('recent-pill : texte de 9 px (--font-size-2xs)', /font-size:\s*var\(--font-size-2xs\)/.test(block(src('recent-pill', 'scss'), '\\.pill')));
+  check(
+    'quick-resume : triangle de lecture plein',
+    /<k-icon class="play filled"/.test(read(path.join(UI, 'quick-resume.ts')) ?? '') &&
+      /:host\(\.filled\)\s+svg\s*\{[^}]*fill:\s*currentColor/.test(src('icon', 'scss')),
+  );
+  check('section-title (étape) : rangée de 20 px', /:host\(\.step\)\s*\{[^}]*min-height:\s*20px/.test(src('section-title', 'scss')));
+}
+
 // Chaque composant du dossier doit être connu de ce contrôle.
 if (fs.existsSync(UI)) {
   for (const file of fs.readdirSync(UI)) {

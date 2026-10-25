@@ -8,7 +8,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-xs);
-  min-height: 36px;
+  min-height: 40px;
   padding: var(--space-xs) var(--space-md);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
@@ -34,7 +34,7 @@
   // Une icône seule : un carré.
   &:not(:has(.label:not(:empty))) {
     flex: none;
-    width: 36px;
+    width: 40px;
     padding: 0;
   }
 }

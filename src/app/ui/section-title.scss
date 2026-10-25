@@ -37,6 +37,8 @@
 
 // Variante « étape » (maquette 282:1560) : pastille ronde teintée de l'accent, titre en gras à casse normale.
 :host(.step) {
+  min-height: 20px;
+
   .title {
     color: var(--color-text-primary);
     font-family: var(--font-sans);

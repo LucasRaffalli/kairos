@@ -54,8 +54,15 @@
 .block {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: 10px;
   min-width: 0;
+}
+
+// Le titre d'étape et son aide, serrés l'un contre l'autre (maquette 220:81).
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .help {
@@ -102,7 +109,7 @@
 // Les puces défilent à l'horizontale ; « + Autre » reste visible à droite.
 .choices {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-xs);
 }
 
@@ -112,7 +119,22 @@
   min-width: 0;
   gap: var(--space-xs);
   overflow-x: auto;
-  scrollbar-width: thin;
+  // L'indicateur de défilement de la maquette : un rail de 3 px, le curseur en accent.
+  padding-bottom: 7px;
+}
+
+.chips::-webkit-scrollbar {
+  height: 3px;
+}
+
+.chips::-webkit-scrollbar-track {
+  border-radius: var(--radius-full);
+  background: var(--color-border-default);
+}
+
+.chips::-webkit-scrollbar-thumb {
+  border-radius: var(--radius-full);
+  background: var(--color-accent-text);
 }
 
 .summary {
@@ -136,8 +158,14 @@
   font-size: var(--font-size-xs);
 }
 
+.submit-row {
+  display: flex;
+  gap: var(--space-xs);
+}
+
 .submit {
   display: flex;
+  flex: 1;
 }
 
 .hint {

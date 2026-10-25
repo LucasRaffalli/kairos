@@ -5,15 +5,16 @@
       <span class="current-meta">{{ lot.parent_monday_id ? lot.parent_monday_id + ' · ' : '' }}{{ t()('switch.stops') }}</span>
     </div>
     <span class="current-clock" aria-hidden="true">{{ clock() }}</span>
-    <k-button variant="ghost" (pressed)="store.closeSwitch()">{{ t()('switch.cancel') }}</k-button>
   </section>
   <k-section-title [title]="t()('switch.form')" />
 }
 
 <div class="steps">
   <section class="block">
-    <k-section-title variant="step" [step]="1" [title]="t()('start.parent.title')" />
-    <p class="help">{{ t()('start.parent.help') }}</p>
+    <div class="head">
+      <k-section-title variant="step" [step]="1" [title]="t()('start.parent.title')" />
+      <p class="help">{{ t()('start.parent.help') }}</p>
+    </div>
     <div class="pair">
       <k-field
         class="grow"
@@ -46,8 +47,10 @@
   </section>
 
   <section class="block">
-    <k-section-title variant="step" [step]="2" [title]="t()('start.subtask.title')" />
-    <p class="help">{{ t()('start.subtask.help') }}</p>
+    <div class="head">
+      <k-section-title variant="step" [step]="2" [title]="t()('start.subtask.title')" />
+      <p class="help">{{ t()('start.subtask.help') }}</p>
+    </div>
     <div class="choices" role="group" [attr.aria-label]="t()('start.subtask.choices')">
       <div class="chips">
         @for (chip of chips(); track chip) {
@@ -82,8 +85,10 @@
   </section>
 
   <section class="block">
-    <k-section-title variant="step" [step]="3" [title]="t()('start.time.title')" />
-    <p class="help">{{ t()('start.time.help') }}</p>
+    <div class="head">
+      <k-section-title variant="step" [step]="3" [title]="t()('start.time.title')" />
+      <p class="help">{{ t()('start.time.help') }}</p>
+    </div>
     <div class="pair">
       <k-field
         class="half"
@@ -111,9 +116,14 @@
   </div>
 </div>
 
-<k-button class="submit" variant="primary" icon="play" kbd="⌘↵" [disabled]="!check().ok || store.busy()" (pressed)="submit()">
-  {{ mode() === 'switch' ? t()('switch.submit') : t()('start.launch') }}
-</k-button>
+<div class="submit-row">
+  @if (current()) {
+    <k-button variant="ghost" (pressed)="store.closeSwitch()">{{ t()('switch.cancel') }}</k-button>
+  }
+  <k-button class="submit" variant="primary" icon="play" kbd="⌘↵" [disabled]="!check().ok || store.busy()" (pressed)="submit()">
+    {{ mode() === 'switch' ? t()('switch.submit') : t()('start.launch') }}
+  </k-button>
+</div>
 <p class="hint">
   <k-icon name="term" />
   {{ mode() === 'switch' ? t()('switch.hint') : t()('start.claudeHint') }}
