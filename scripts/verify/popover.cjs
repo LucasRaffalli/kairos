@@ -46,6 +46,8 @@ const lib = bundle([
   `${L}/errors.ts`,
   `${L}/today.ts`,
   'src/app/lang/fill.ts',
+  'src/app/lang/fr.ts',
+  'src/app/lang/en.ts',
   `${S}/mock-kairos-api.ts`,
   `${S}/kairos.store.ts`,
 ]);
@@ -58,14 +60,21 @@ check('formatClock jamais négatif', lib.formatClock(-5) === '00:00:00');
 check('formatHm 2520', lib.formatHm(2520) === '0 h 42');
 check('formatHm 14040', lib.formatHm(14040) === '3 h 54');
 check('formatHm 3900', lib.formatHm(3900) === '1 h 05');
-check('formatBar 2533', lib.formatBar(2533) === '0:42');
-check('formatBar 3900', lib.formatBar(3900) === '1:05');
+
+const localIso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+// Point 1 : la date de l'en-tête se lit dans la date du cœur, pas dans l'horloge au premier rendu.
+check('en-tête fr : jour et mois', /23/.test(lib.formatDayHeader('2026-10-23', 'fr')) && /oct/.test(lib.formatDayHeader('2026-10-23', 'fr')));
+check('en-tête en : langue de l’interface', /Fri/.test(lib.formatDayHeader('2026-10-23', 'en')) && /Oct/.test(lib.formatDayHeader('2026-10-23', 'en')));
+check('en-tête : deux jours, deux textes', lib.formatDayHeader('2026-10-23', 'fr') !== lib.formatDayHeader('2026-10-24', 'fr'));
+check('en-tête : le jour est lu en date locale (pas décalé par UTC)', /sam\./.test(lib.formatDayHeader('2026-10-24', 'fr')));
+check('en-tête : sans relevé, le jour de l’horloge', lib.formatDayHeader(undefined, 'fr') === lib.formatDayHeader(localIso(new Date()), 'fr'));
 
 // --- 2. « HH:MM » vers un instant local ---------------------------------------
 const local = (y, mo, d, h, mi) => Math.floor(new Date(y, mo, d, h, mi).getTime() / 1000);
 const noon = new Date(2026, 9, 23, 12, 0).getTime();
 check('13:34 le jour même', lib.secondsFromHhmm('13:34', noon) === local(2026, 9, 23, 13, 34));
 check('9:05 accepté', lib.secondsFromHhmm('9:05', noon) === local(2026, 9, 23, 9, 5));
+check('« 9:05 » entouré d’espaces accepté', lib.secondsFromHhmm('  9:05  ', noon) === local(2026, 9, 23, 9, 5));
 for (const bad of ['9:5', '25:00', '12:60', 'ab', '', '13h34']) {
   check(`« ${bad} » est refusé`, lib.secondsFromHhmm(bad, noon) === null);
 }
@@ -85,6 +94,10 @@ check('ni ID ni nom', !refused.ok && refused.reason === 'need-parent-or-name');
 check('un ID seul passe', lib.canSubmit(form({ parentId: '12406850311' })).ok === true);
 check('un nom seul passe', lib.canSubmit(form({ parentName: 'Réunion' })).ok === true);
 check('espaces seuls : refusé', lib.canSubmit(form({ parentName: '   ' })).ok === false);
+check('un ID fait d’espaces : refusé', lib.canSubmit(form({ parentId: '   ' })).ok === false);
+check('un ID d’espaces ne cache pas un vrai nom', lib.canSubmit(form({ parentId: '   ', parentName: 'Réunion' })).ok === true);
+const reqSpaces = lib.toStartRequest(form({ parentId: '   ', parentName: 'Réunion' }), noon);
+check('un ID d’espaces n’est pas envoyé au cœur', reqSpaces.parent_monday_id === null && reqSpaces.name === 'Réunion');
 const badTime = lib.canSubmit(form({ parentId: '1', time: '9:5' }));
 check('début mal formé', !badTime.ok && badTime.reason === 'bad-time');
 check('début vide : maintenant', lib.canSubmit(form({ parentId: '1', time: '' })).ok === true);
@@ -120,6 +133,11 @@ for (const key of ['', '1', 'Réunion', '12406850311', 'x'.repeat(500), '😀'])
   inRange &&= Number.isInteger(i) && i >= 0 && i <= 5;
 }
 check('parentColorIndex dans 0..5', inRange);
+{
+  const reached = new Set();
+  for (let i = 0; i < 2000; i++) reached.add(lib.parentColorIndex(String(i * 7919)));
+  check('parentColorIndex atteint les 6 couleurs', reached.size === 6 && [0, 1, 2, 3, 4, 5].every((i) => reached.has(i)), [...reached].join());
+}
 
 // --- 5. Libellé de lancement : des morceaux, que la vue traduit -------------------
 const hm = () => '13:34';
@@ -136,6 +154,17 @@ check('source absente : lancé à la main', launch({ source: null }).who === nul
 check('source inconnue : repli, jamais « undefined »', launch({ source: 'cursor' }).who === null);
 check('Claude Desktop', launch({ source: 'claude-desktop' }).who === 'claude-desktop');
 check('dossier = dossier personnel', launch({ workdir: '/Users/aegis' }).folder === '~');
+check(
+  'dossier personnel voisin (/Users/aegis2) : pas de ~',
+  launch({ workdir: '/Users/aegis2/x/y' }).folder === '…/x/y',
+  launch({ workdir: '/Users/aegis2/x/y' }).folder,
+);
+check('dossier avec / final sous le dossier personnel', launch({ workdir: '/Users/aegis/Beeside/main/' }).folder === '~/Beeside/main');
+check(
+  'dossier personnel avec / final',
+  lib.shortWorkdir('/Users/aegis/Beeside/main', '/Users/aegis/') === '~/Beeside/main' && lib.shortWorkdir('/Users/aegis/', '/Users/aegis/') === '~',
+);
+check('dossier hors du dossier personnel avec / final', lib.shortWorkdir('/tmp/a/b/c/', '/Users/aegis') === '…/b/c');
 check(
   'le début est passé à hm',
   lib.describeLaunch({ source: null, startedAt: local(2026, 9, 23, 8, 7), workdir: null, home: '', hm: lib.formatTimeOfDay }).time === '08:07',
@@ -225,12 +254,82 @@ check('relancer un lot sans ID : par son nom', r3.parent_monday_id === null && r
   check('sous-tâche sur deux lignes : sous son nom', at('invalid_name', { parentName: 'Refonte', subtask: 'a\nb' }) === 'subtask-name');
   check('121 caractères (accents comptés comme un) : fautif', at('invalid_name', { subtask: 'é'.repeat(121) }) === 'subtask-name');
   check('120 caractères : pas fautif', at('invalid_name', { parentName: 'é'.repeat(120) }) === null);
+  check('121 émojis (2 unités UTF-16 chacun) : fautif', at('invalid_name', { subtask: '😀'.repeat(121) }) === 'subtask-name');
+  check('120 émojis : pas fautif', at('invalid_name', { parentName: '😀'.repeat(120) }) === null);
   check('les deux noms fautifs : bandeau', at('invalid_name', { parentName: 'x'.repeat(200), subtask: 'y'.repeat(200) }) === null);
   check('aucun nom fautif visible : bandeau', at('invalid_name', { parentName: 'Refonte', subtask: 'Back' }) === null);
   check('same_lot avec ID : sous l’ID', at('same_lot', { parentId: '12' }) === 'parent-id');
   check('same_lot sans ID : sous le nom', at('same_lot', { parentName: 'Réunion' }) === 'parent-name');
   check('in_future, too_old : début', at('in_future', {}) === 'time' && at('too_old', {}) === 'time');
   check('db_unavailable : bandeau', at('db_unavailable', {}) === null);
+}
+
+// --- 6 quater. Le texte d'un refus : une clé de traduction par code, le message du cœur en repli --
+{
+  const REQUIRED = [
+    'already_running',
+    'nothing_running',
+    'nothing_to_resume',
+    'same_lot',
+    'in_future',
+    'too_old',
+    'clock_behind',
+    'invalid_monday_id',
+    'invalid_name',
+    'invalid_time',
+    'reference_missing',
+    'db_unavailable',
+    'db_newer',
+    'overlap',
+    'internal',
+  ];
+  for (const code of REQUIRED) {
+    const key = lib.ERROR_KEYS[code];
+    check(`refus « ${code} » : une clé`, typeof key === 'string' && key.startsWith('error.'), String(key));
+    check(`refus « ${code} » : texte en fr et en en`, !!lib.fr[key] && !!lib.en[key] && lib.fr[key] !== lib.en[key], key);
+  }
+  for (const key of Object.values(lib.ERROR_KEYS)) {
+    for (const [lang, dictionary] of [
+      ['fr', lib.fr],
+      ['en', lib.en],
+    ]) {
+      const text = dictionary[key] ?? '';
+      check(`${key} (${lang}) : pas de commande à taper`, !/`|kairos |--at|--stop/.test(text), text);
+    }
+  }
+  check(
+    'db_unavailable : ne promet pas « 5 secondes »',
+    !/5 (secondes|seconds)/.test(lib.fr[lib.ERROR_KEYS.db_unavailable] + lib.en[lib.ERROR_KEYS.db_unavailable]),
+  );
+  const tFr = (key) => lib.fr[key];
+  const tEn = (key) => lib.en[key];
+  const coreRefusal = { code: 'overlap', message: 'Chevauche 12 : raccourcis.' };
+  check(
+    'refus connu : traduit selon la langue',
+    lib.errorMessage(coreRefusal, tEn) === lib.en['error.overlap'] && lib.errorMessage(coreRefusal, tFr) === lib.fr['error.overlap'],
+  );
+  check(
+    'refus inconnu : le message du cœur en repli',
+    lib.errorMessage({ code: 'day_not_open', message: 'La journée est clôturée.' }, tEn) === 'La journée est clôturée.',
+  );
+  check('refus « toString » : pas d’accident de prototype', lib.errorMessage({ code: 'toString', message: 'm' }, tFr) === 'm');
+}
+
+// --- 6 quinquies. Le lot affiché est-il celui qu'on a demandé ? ---------------------------
+{
+  const lotOf = (over) => ({ id: 1, parent_monday_id: '111', parent_label: 'Refonte', subtask: 'Front', subtask_monday_id: null, name: null, ...over });
+  const asked = (over) => ({ parent_monday_id: null, parent_label: null, name: null, subtask: null, subtask_monday_id: null, at: null, ...over });
+  check('même ID, sous-tâche non précisée : le même lot', lib.lotMatches(lotOf({}), asked({ parent_monday_id: '111' })));
+  check('autre ID : pas le même lot', !lib.lotMatches(lotOf({}), asked({ parent_monday_id: '222' })));
+  check('même ID, autre sous-tâche : pas le même lot', !lib.lotMatches(lotOf({}), asked({ parent_monday_id: '111', subtask: 'Back' })));
+  check('même ID, même sous-tâche : le même lot', lib.lotMatches(lotOf({}), asked({ parent_monday_id: '111', subtask: 'Front' })));
+  check(
+    'autre ID de sous-tâche : pas le même lot',
+    !lib.lotMatches(lotOf({ subtask_monday_id: '9' }), asked({ parent_monday_id: '111', subtask_monday_id: '8' })),
+  );
+  check('par le nom, même nom : le même lot', lib.lotMatches(lotOf({ parent_monday_id: null, name: 'Réunion' }), asked({ name: 'Réunion' })));
+  check('par le nom, autre nom : pas le même lot', !lib.lotMatches(lotOf({ parent_monday_id: null, name: 'Réunion' }), asked({ name: 'Appel' })));
+  check('un nom demandé ne correspond pas à un lot avec ID', !lib.lotMatches(lotOf({}), asked({ name: 'Réunion' })));
 }
 
 // --- 6 ter. Résumé du dialogue Quitter (maquette 230:456 : sous-tâche · ID · durée) --
@@ -264,6 +363,10 @@ check('relancer un lot sans ID : par son nom', r3.parent_monday_id === null && r
   const shell = read(SHELL);
   const closes = shell.match(/\.(hide|close)\(/g) ?? [];
   check('la coquille ne ferme qu’une fois, sur Échap', closes.length === 1 && /'Escape'/.test(shell), closes.join());
+  check('la coquille : la date vient du relevé du cœur', /formatDayHeader\(/.test(shell) && /today\.date/.test(shell) && !/new Date\(\)/.test(shell));
+  check('la coquille : le bandeau traduit le refus', /errorMessage\(/.test(shell) && !/error\.message/.test(read(path.join(P, 'popover.html'))));
+  check('la coquille : Réessayer suit retryable', /store\.retryable\(\)/.test(read(path.join(P, 'popover.html'))));
+  check('Lancer : les erreurs de champ sont traduites', /errorMessage\(/.test(read(path.join(P, 'start-view.ts'))));
   check('la coquille : ⌘↵ et ⌘.', /metaKey/.test(shell) && /'Enter'/.test(shell) && /'\.'/.test(shell));
   check('la coquille : la hauteur suit le contenu', /ResizeObserver/.test(shell) && /setPopoverHeight/.test(shell));
   check(
@@ -412,22 +515,70 @@ function spied(scenarioName, now = () => NOW0) {
     };
     const store = new lib.KairosStore(api, () => NOW0);
     await store.reload();
-    store.form.update((f) => ({ ...f, parentId: '5' }));
+    store.form.update((f) => ({ ...f, parentId: '12406850311' })); // le lot qui tourne déjà : un double clic
     await store.start();
     check('already_running et déjà « en cours » : aucune erreur', store.error() === null && store.view() === 'running');
     store.dispose();
     void inner;
   }
 
-  // already_running alors que l'état affiché était « rien en cours » (lancé ailleurs entre-temps) : idem après relecture.
+  // already_running alors que l'état affiché était « rien en cours » (lancé ailleurs entre-temps) : idem après relecture,
+  // SI le lot lancé est celui qu'on demandait.
   {
     const { api, inner } = spied('idle');
     const store = new lib.KairosStore(api, () => NOW0);
     await store.reload();
-    await inner.start({ parent_monday_id: '77' }); // l'autre programme lance
+    await inner.start({ parent_monday_id: '5' }); // l'autre programme lance le même lot
     store.form.update((f) => ({ ...f, parentId: '5' }));
     await store.start();
-    check('lancé ailleurs entre-temps : la vue rattrape, sans erreur', store.view() === 'running' && store.error() === null);
+    check('même lot lancé ailleurs entre-temps : la vue rattrape, sans erreur', store.view() === 'running' && store.error() === null);
+    store.dispose();
+  }
+
+  // Point 3 : un AUTRE lot lancé ailleurs (Claude lance B pendant que le formulaire demande A) : le refus se voit.
+  {
+    const { api, inner } = spied('idle');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    await inner.start({ parent_monday_id: '77' }); // Claude lance B
+    store.form.update((f) => ({ ...f, parentId: '5' }));
+    await store.start();
+    check('autre lot lancé ailleurs : B s’affiche', store.view() === 'running' && store.snapshot().status.lot.parent_monday_id === '77');
+    check('autre lot lancé ailleurs : le refus est montré', store.error()?.code === 'already_running');
+    check('autre lot lancé ailleurs : le brouillon est gardé', store.form().parentId === '5');
+    store.dispose();
+  }
+  {
+    // Même ID mais autre sous-tâche : ce n'est pas le lot demandé.
+    const { api, inner } = spied('idle');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    await inner.start({ parent_monday_id: '5', subtask: 'Back' });
+    store.form.update((f) => ({ ...f, parentId: '5', subtask: 'Front' }));
+    await store.start();
+    check('même parent, autre sous-tâche : le refus est montré', store.error()?.code === 'already_running');
+    store.dispose();
+  }
+  {
+    // « Reprendre » un lot récent : le lot en cours doit avoir le même id.
+    const { api, inner } = spied('idle');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    const recent = { id: 1, parent_monday_id: '12406850311', parent_label: 'X', subtask: 'Front', subtask_monday_id: null, name: null };
+    await inner.start({ parent_monday_id: '98765' });
+    await store.launchRecent(recent);
+    check('reprendre pendant qu’un autre lot a été lancé ailleurs : le refus est montré', store.error()?.code === 'already_running');
+    store.dispose();
+  }
+  {
+    // Le lot repris est celui que l'autre programme vient de lancer (même id) : rien à dire.
+    const { api, inner } = spied('idle');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    await inner.start({ parent_monday_id: '98765' });
+    const lotId = inner.current.status.lot.id; // sans attendre : le magasin croit encore « rien en cours »
+    await store.launchRecent({ id: lotId, parent_monday_id: '98765', parent_label: null, subtask: 'Front', subtask_monday_id: null, name: null });
+    check('reprendre le lot déjà lancé ailleurs : aucun refus', store.error() === null && store.view() === 'running');
     store.dispose();
   }
 
@@ -616,12 +767,12 @@ function spied(scenarioName, now = () => NOW0) {
     store.dispose();
   }
 
-  // already_running rendu silencieux : le brouillon est GARDÉ (le lot affiché n'est pas forcément le sien).
+  // already_running rendu silencieux (même lot) : le brouillon est GARDÉ, il sert tel quel à « Changer de lot ».
   {
     const { api, inner } = spied('idle');
     const store = new lib.KairosStore(api, () => NOW0);
     await store.reload();
-    await inner.start({ parent_monday_id: '77' });
+    await inner.start({ parent_monday_id: '5' });
     store.form.update((f) => ({ ...f, parentId: '5' }));
     await store.start();
     check('already_running silencieux : brouillon gardé', store.form().parentId === '5' && store.error() === null);
@@ -742,6 +893,145 @@ function spied(scenarioName, now = () => NOW0) {
     await store.reload();
     await store.start();
     check('formulaire invalide : aucun appel à start', !calls.includes('start'));
+    store.dispose();
+  }
+
+  // M4 : l'écran était périmé (le lot s'est arrêté ailleurs) : on relit, et la vue rattrape sans bannière.
+  {
+    const { api, inner } = spied('running');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    api.override = {
+      stop: async () => {
+        await inner.stop(); // arrêté ailleurs juste avant
+        throw { code: 'nothing_running', message: 'Aucun lot en cours.' };
+      },
+    };
+    await store.stop();
+    check('nothing_running : la vue rattrape (Lancer)', store.view() === 'start');
+    check('nothing_running : pas de bannière sur l’écran Lancer', store.error() === null);
+    store.dispose();
+  }
+  {
+    const { api, inner } = spied('paused');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    api.override = {
+      resume: async () => {
+        await inner.stop(); // la pause a été close ailleurs
+        throw { code: 'nothing_to_resume', message: 'Rien à reprendre.' };
+      },
+    };
+    await store.resume();
+    check('nothing_to_resume : la vue rattrape, sans bannière', store.view() === 'start' && store.error() === null);
+    store.dispose();
+  }
+  {
+    // Rien n'a changé côté cœur : le refus reste affiché (on ne se tait pas sans raison).
+    const { api } = spied('running');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    api.override = {
+      pause: async () => {
+        throw { code: 'nothing_running', message: 'Aucun lot en cours.' };
+      },
+    };
+    await store.pause();
+    check('nothing_running sans changement d’état : la bannière reste', store.error()?.code === 'nothing_running' && store.view() === 'running');
+    store.dispose();
+  }
+  {
+    // Une relecture qui échoue garde son erreur de base : le refus périmé ne la remplace pas.
+    const { api, inner } = spied('running');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    let reads = 0;
+    api.override = {
+      stop: async () => {
+        throw { code: 'nothing_running', message: 'Aucun lot en cours.' };
+      },
+      snapshot: async () => {
+        reads++;
+        throw { code: 'db_unavailable', message: 'Base inaccessible.' };
+      },
+    };
+    await store.stop();
+    check('refus périmé + relecture en échec : l’erreur de base reste', reads > 0 && store.error()?.code === 'db_unavailable' && store.stale());
+    store.dispose();
+    void inner;
+  }
+
+  // M4 : « Réessayer » aussi quand le tout premier relevé échoue avec un code non périmé.
+  {
+    const { api } = spied('idle');
+    api.override = {
+      snapshot: async () => {
+        throw { code: 'internal', message: 'Erreur interne.' };
+      },
+    };
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    check(
+      'premier relevé en échec (internal) : Réessayer proposé',
+      store.snapshot() === null && store.error()?.code === 'internal' && store.retryable() === true,
+    );
+    api.override = undefined;
+    await store.reload();
+    check('relevé réussi : plus de Réessayer, plus d’erreur', store.retryable() === false);
+    api.override = {
+      stop: async () => {
+        throw { code: 'internal', message: 'Erreur interne.' };
+      },
+    };
+    await store.stop().catch(() => {});
+    store.dispose();
+
+    const running = spied('running');
+    const s2 = new lib.KairosStore(running.api, () => NOW0);
+    await s2.reload();
+    running.api.override = {
+      stop: async () => {
+        throw { code: 'internal', message: 'Erreur interne.' };
+      },
+    };
+    await s2.stop();
+    check('erreur ordinaire avec une vue connue : pas de Réessayer', s2.error()?.code === 'internal' && s2.retryable() === false);
+    s2.dispose();
+    const locked = spied('error-locked');
+    const s3 = new lib.KairosStore(locked.api, () => NOW0);
+    await s3.reload();
+    await s3.reload();
+    check('base inaccessible : Réessayer proposé', s3.retryable() === true);
+    s3.dispose();
+  }
+
+  // Point 1 : la date de l'en-tête suit le jour du cœur, qui change à minuit.
+  {
+    let clock = new Date(2026, 9, 23, 23, 59).getTime();
+    const { api } = spied('running', () => clock);
+    const store = new lib.KairosStore(api, () => clock);
+    await store.reload();
+    const before = store.snapshot().today.date;
+    clock += 2 * 60 * 1000; // minuit passé
+    await store.reload();
+    const after = store.snapshot().today.date;
+    check('minuit passé : le jour du relevé change', before === '2026-10-23' && after === '2026-10-24', `${before} -> ${after}`);
+    check('minuit passé : l’en-tête change', lib.formatDayHeader(before, 'fr') !== lib.formatDayHeader(after, 'fr'));
+    store.dispose();
+  }
+
+  // M5 : le magasin sait pour quel parent ses puces sont en place (effacer vite un chiffre les redemande).
+  {
+    const { api } = spied('idle');
+    const store = new lib.KairosStore(api, () => NOW0);
+    await store.reload();
+    check('puces : aucun parent demandé au départ', store.choicesParent === undefined);
+    await store.loadChoices('1');
+    check('puces : le parent demandé est retenu', store.choicesParent === '1');
+    store.resetChoices();
+    check('puces : réinitialisées, le parent est oublié', store.choicesParent === undefined);
+    await store.loadChoices(null);
+    check('puces : « aucun parent » est un parent demandé', store.choicesParent === null);
     store.dispose();
   }
 
