@@ -22,7 +22,7 @@ L'icône affiche la durée du lot en cours en `H:MM` (sans secondes), « Pause �
 
 **Raccourcis** : ⌘↵ lance (ou change de lot), ⌘. arrête, Échap ferme le popover. ⌘Q avec un lot en cours demande s'il faut garder le chrono.
 
-**Aucune action ne ferme le popover** : lancer, pause, reprise, arrêt et changement de lot le laissent ouvert. Seuls Échap et la perte du focus le ferment. Si la base est verrouillée par un autre programme, un bandeau l'indique avec un bouton **Réessayer**, et la dernière vue connue reste affichée en grisé. Une seconde instance de l'app se ferme aussitôt et montre la première.
+**Aucune action ne ferme le popover** : lancer, pause, reprise, arrêt et changement de lot le laissent ouvert. Seuls Échap, la perte du focus et un nouveau clic sur l'icône le ferment. Quand la base est illisible et la vue grisée, les raccourcis ⌘ sont ignorés. Si la base est verrouillée par un autre programme, un bandeau l'indique avec un bouton **Réessayer**, et la dernière vue connue reste affichée en grisé. Une seconde instance de l'app se ferme aussitôt et montre la première.
 
 **À venir** : 2b la journée (modifier, ajouter, supprimer une entrée, clôturer, le texte à saisir dans Monday) ; 2c les réglages (engrenage, raccourcis globaux, parents épinglés, premier lancement) ; 2d la minuterie de fin, les absences et les notifications.
 
@@ -71,7 +71,7 @@ Installé à la main par le DMG ? `brew install --cask --force lucasraffalli/kai
 claude mcp add kairos --scope user -- kairos mcp
 ```
 
-**Claude Desktop** : télécharger `https://release.lucasraffalli.com/kairos/Kairos_<version>.mcpb` (la version est celle de `latest.json`) et double-cliquer. L'extension embarque son propre binaire : elle ne dépend ni de Homebrew ni du PATH. Elle ne se met pas à jour toute seule : pour une nouvelle version, rouvrir le nouveau fichier. À défaut, l'ancienne méthode reste possible : entrée `kairos` sous `mcpServers` dans `~/Library/Application Support/Claude/claude_desktop_config.json`, avec `args: ["mcp"]` et `command: "/Applications/Kairos.app/Contents/MacOS/kairos"` (chemin absolu : Claude Desktop, lancé depuis le Dock, n'a pas le PATH de Homebrew), puis redémarrage.
+**Claude Desktop** : télécharger `https://release.lucasraffalli.com/kairos/Kairos_<version>.mcpb` (la version est celle de `latest.json`) et double-cliquer. L'extension embarque son propre binaire : elle ne dépend ni de Homebrew ni du PATH. Elle ne se met pas à jour toute seule : pour une nouvelle version, rouvrir le nouveau fichier. **Après une mise à jour de l'app, réinstaller l'extension** : la migration 3 de la base est voulue, mais l'ancienne extension embarque un binaire 0.2.0 qui refuse une base plus récente. Sans réinstallation, les outils de Claude Desktop répondent « base plus récente ». À défaut, l'ancienne méthode reste possible : entrée `kairos` sous `mcpServers` dans `~/Library/Application Support/Claude/claude_desktop_config.json`, avec `args: ["mcp"]` et `command: "/Applications/Kairos.app/Contents/MacOS/kairos"` (chemin absolu : Claude Desktop, lancé depuis le Dock, n'a pas le PATH de Homebrew), puis redémarrage.
 
 **Développement** (sans installer l'app) : `cargo build` puis `claude mcp add kairos --scope user -- "$PWD/target/debug/kairos" mcp`.
 
