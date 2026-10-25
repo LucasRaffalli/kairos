@@ -1,11 +1,21 @@
 :host {
   display: flex;
+  flex: 1;
+  min-height: 0;
   flex-direction: column;
   gap: var(--space-2xs);
 }
 
+k-section-title {
+  flex: none;
+}
+
+// Le titre « Aujourd'hui » reste en place ; la liste défile dessous.
 .rows {
   display: flex;
+  flex: 1;
+  min-height: 0;
+
   flex-direction: column;
   gap: 2px;
   margin: 0;

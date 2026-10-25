@@ -78,6 +78,13 @@ body {
   box-shadow: 0 0 0 3px var(--color-status-danger-ring);
 }
 
+// Une zone qui défile à la verticale : barre fine et discrète, sur la couleur de bordure.
+.scroll-y {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-default) transparent;
+}
+
 // Lu par les lecteurs d'écran, invisible à l'écran (état annoncé, durée lisible du chrono).
 .sr-only {
   position: absolute;

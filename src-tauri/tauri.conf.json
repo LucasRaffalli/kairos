@@ -16,7 +16,7 @@
         "label": "popover",
         "title": "Kairos",
         "width": 340,
-        "height": 420,
+        "height": 560,
         "visible": false,
         "decorations": true,
         "titleBarStyle": "Overlay",

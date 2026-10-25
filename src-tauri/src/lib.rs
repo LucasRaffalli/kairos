@@ -31,7 +31,6 @@ pub fn run() {
             bridge::commands::stop,
             bridge::commands::pause,
             bridge::commands::resume,
-            bridge::commands::set_popover_height,
             bridge::commands::quit,
         ])
         .setup(|app| {

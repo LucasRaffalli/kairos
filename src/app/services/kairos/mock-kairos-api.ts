@@ -90,8 +90,6 @@ export class MockKairosApi implements KairosApi {
     return () => this.changed.delete(callback);
   }
 
-  async setPopoverHeight(_pixels: number): Promise<void> {}
-
   async quit(_stopLot: boolean): Promise<void> {}
 
   onQuitRequested(callback: () => void): () => void {

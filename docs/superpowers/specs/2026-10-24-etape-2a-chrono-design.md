@@ -40,7 +40,7 @@ Des commandes fines, qui ouvrent la base, appellent le cœur et rendent ses type
 | `subtask_choices(parent)`           | Les puces de sous-tâche quand on change de parent dans le formulaire.                                                                                                                                                                                  |
 | `start(request)`, `switch(request)` | `request` : `parent_monday_id`, `parent_label`, `name`, `subtask`, `subtask_monday_id`, `at` (secondes, calculées par l'interface depuis « HH:MM »). Source `manual`, pas de dossier.                                                                  |
 | `stop()`, `pause()`, `resume()`     | Comme dans le cœur.                                                                                                                                                                                                                                    |
-| `set_popover_height(pixels)`        | Ajuste la hauteur de la fenêtre au contenu.                                                                                                                                                                                                            |
+| (supprimée) `set_popover_height`    | Remplacée par une hauteur fixe, voir l'amendement du 25 octobre.                                                                                                                                                                                       |
 | `quit(stop_lot: bool)`              | Quitte l'app, en arrêtant d'abord le lot si demandé.                                                                                                                                                                                                   |
 
 Le temps est celui du système (`SystemClock`) ; l'interface formate les heures dans le fuseau du système, comme le cœur.
@@ -79,7 +79,7 @@ La date de l'en-tête est celle de l'ordinateur. Tous les textes passent par `I1
 
 ## Fenêtre
 
-340 px de large ; la hauteur suit le contenu, plafonnée à la hauteur de l'écran moins 80 px, avec défilement interne. Le popover se place sous l'icône (`placement.rs`, existant). Perdre le focus le ferme, comme aujourd'hui ; le brouillon du formulaire (champs, sous-tâche choisie) est gardé en mémoire de l'interface pour la réouverture.
+340 px de large, 560 px de haut (fixe, voir l'amendement), avec défilement interne des zones longues. Le popover se place sous l'icône (`placement.rs`, existant). Perdre le focus le ferme, comme aujourd'hui ; le brouillon du formulaire (champs, sous-tâche choisie) est gardé en mémoire de l'interface pour la réouverture.
 
 ### Amendement du 25 octobre
 
@@ -89,9 +89,10 @@ Après un essai en local, Lucas a choisi une **fenêtre qui reste ouverte** à l
 - Rouge : range la fenêtre dans la barre de menus, l'app continue de tourner, la fenêtre n'est jamais détruite. Jaune : désactivé (Tauri 2.12 n'émet aucun événement de réduction à intercepter, et sans Dock une fenêtre réduite n'aurait nulle part où aller). Vert : désactivé (largeur fixe, hauteur qui suit le contenu).
 - Elle ne se ferme plus à la perte du focus. Seuls le bouton rouge, Échap, ⌘W (« Fermer la fenêtre » du menu de l'app, qui masque) et un clic sur l'icône quand elle est au premier plan la rangent. Aucune action du chronomètre ne la ferme.
 - Clic sur l'icône : fenêtre rangée, on l'affiche ; visible mais derrière d'autres fenêtres, on la ramène devant ; visible et au premier plan, on la range.
-- Position : centrée sous l'icône au tout premier affichage, puis gardée en mémoire pour la session (rien sur disque). Un changement de hauteur garde le bord supérieur ; la fenêtre n'est remontée que si elle sortirait de l'écran par le bas.
+- Position : centrée sous l'icône au tout premier affichage, puis gardée en mémoire pour la session (rien sur disque).
 - Le titre de l'icône affiche les secondes (`H:MM:SS`), à la demande de Lucas : une durée à la minute donnait l'impression d'un compteur bloqué. Le réglage « Durée dans la barre de menus » (2c) pourra l'adapter.
 - Réglage interne `menu_title_seconds` (`true` par défaut, `false` pour `H:MM`), dans la table `settings` du cœur et modifiable par `kairos config menu_title_seconds <true|false>`. Sans ligne en base, la valeur est le défaut (aucune migration : les anciennes versions restent compatibles) ; une valeur invalide retombe sur le défaut côté app et est refusée par `config`. L'écran Réglages (2c) l'exposera.
+- **Hauteur fixe de 560 pt** pour toutes les vues (largeur 340 pt inchangée), au lieu de la hauteur qui suivait le contenu. Une seule source : `height` de la fenêtre dans `tauri.conf.json` ; le style prend `100vh`. Le premier affichage la ramène à l'écran moins 80 px sur un écran trop petit. L'en-tête et les boutons restent en place ; seules la liste du jour, le formulaire de lancement et « Reprendre » défilent. La commande `set_popover_height` et la mesure de hauteur côté interface sont supprimées.
 
 ## La barre de menus
 
@@ -128,7 +129,7 @@ Le titre à côté de l'icône : la durée du lot en cours en `H:MM:SS`, « Paus
 ## Ordre de travail (esquisse, le plan le détaille)
 
 1. Cœur : migration 3, `workdir`, `launched_by`, `subtask_choices`, `Db::data_version`, hook et CLI qui écrivent le dossier.
-2. Pont Rust : commandes, surveillance de `data_version`, titre de l'icône, dialogue « Quitter », hauteur du popover, instance unique.
+2. Pont Rust : commandes, surveillance de `data_version`, titre de l'icône, dialogue « Quitter », hauteur de la fenêtre (fixe), instance unique.
 3. Couche Angular : l'interface du pont (réelle et fausse), le magasin d'état, les formats et la logique pure, avec leurs tests.
 4. Composants communs, d'après les maquettes de composants.
 5. Les vues : Lancer, Minuteur lancé, En pause, Changer de lot, erreur, Quitter ; câblage et raccourcis.

@@ -4,6 +4,15 @@
   gap: var(--space-sm);
 }
 
+// Le formulaire défile entre le haut (lot courant) et le bas (bouton, aide, « Reprendre »), qui
+// restent en place.
+.current,
+k-section-title,
+.submit-row,
+.hint {
+  flex: none;
+}
+
 .ellipsis {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -47,8 +56,13 @@
 
 .steps {
   display: flex;
+  flex: 1;
+  min-height: 0;
   flex-direction: column;
   gap: 18px;
+  // Place pour l'anneau de focus des champs, que la zone défilante couperait sinon.
+  margin: -4px;
+  padding: 4px;
 }
 
 .block {
@@ -180,6 +194,9 @@
 
 .resumes {
   display: flex;
+  flex: none;
   flex-wrap: wrap;
   gap: 6px;
+  // Au plus trois rangées de pastilles ; au-delà, la liste défile.
+  max-height: 104px;
 }

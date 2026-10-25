@@ -113,7 +113,6 @@ export interface KairosApi {
   subtaskChoices(parent: string | null): Promise<SubtaskChoices>;
   /** Appelé quand la base change (ligne de commande, Claude, l'app elle-même). Rend de quoi se désabonner. */
   onChanged(callback: () => void): () => void;
-  setPopoverHeight(pixels: number): Promise<void>;
   /** Quitte l'app, en arrêtant d'abord le lot si `stopLot`. */
   quit(stopLot: boolean): Promise<void>;
   /** Appelé quand l'utilisateur demande à quitter alors qu'un lot tourne. */

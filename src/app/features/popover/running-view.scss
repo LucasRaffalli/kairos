@@ -4,6 +4,12 @@
   gap: var(--space-sm);
 }
 
+// Le chrono, le nom du lot et les boutons restent en place ; seule la liste du jour défile.
+.lot,
+.actions {
+  flex: none;
+}
+
 .lot {
   display: flex;
   flex-direction: column;

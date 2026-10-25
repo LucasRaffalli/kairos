@@ -192,7 +192,7 @@ fn clock(duration: i64, seconds: bool) -> String {
 /// La base est lue hors du fil principal, pour ne jamais figer l'interface pendant une attente
 /// de verrou.
 pub mod commands {
-    use tauri::{AppHandle, State, WebviewWindow};
+    use tauri::{AppHandle, State};
 
     use super::*;
     use crate::inflight::InFlight;
@@ -262,12 +262,6 @@ pub mod commands {
     #[tauri::command]
     pub async fn resume(actions: State<'_, InFlight>) -> BridgeResult<StartedLot> {
         with_action(&actions, super::resume).await
-    }
-
-    /// La hauteur du contenu, en pixels CSS : la fenêtre la suit, sous l'icône.
-    #[tauri::command]
-    pub fn set_popover_height(window: WebviewWindow, pixels: f64) {
-        crate::tray::resize_popover(&window, pixels);
     }
 
     /// Quitte l'app, en arrêtant d'abord le lot si demandé, et une fois les actions en vol

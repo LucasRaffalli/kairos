@@ -21,7 +21,7 @@ import { lotTitle, parentColorIndex } from './logic/view';
   template: `
     @if (day().rows.length) {
       <k-section-title [title]="fill(t()('today.title'), { total: formatHm(day().total) })" />
-      <ul class="rows">
+      <ul class="rows scroll-y">
         @for (row of day().rows; track row.id) {
           <li class="row" [class.open]="row.open">
             <span class="swatch" [attr.data-color]="color(row.lot)" aria-hidden="true"></span>

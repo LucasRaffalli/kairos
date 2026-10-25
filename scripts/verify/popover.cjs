@@ -368,7 +368,15 @@ check('relancer un lot sans ID : par son nom', r3.parent_monday_id === null && r
   check('la coquille : Réessayer suit retryable', /store\.retryable\(\)/.test(read(path.join(P, 'popover.html'))));
   check('Lancer : les erreurs de champ sont traduites', /errorMessage\(/.test(read(path.join(P, 'start-view.ts'))));
   check('la coquille : ⌘↵ et ⌘.', /metaKey/.test(shell) && /'Enter'/.test(shell) && /'\.'/.test(shell));
-  check('la coquille : la hauteur suit le contenu', /ResizeObserver/.test(shell) && /setPopoverHeight/.test(shell));
+  check('la coquille : plus de mesure de hauteur (la fenêtre a une hauteur fixe)', !/ResizeObserver|setPopoverHeight/.test(shell));
+  const shellCss = read(path.join(P, 'popover.scss'));
+  check('la coquille : hauteur de la fenêtre, sans valeur en dur', /height:\s*100vh/.test(shellCss) && !/\b560px/.test(shellCss));
+  check('la fenêtre fait 560 de haut, une seule source', JSON.parse(read(path.join(REPO, 'src-tauri', 'tauri.conf.json'))).app.windows[0].height === 560);
+  check(
+    'la liste du jour, le formulaire et « Reprendre » défilent',
+    (read(path.join(P, 'today-list.ts')).match(/scroll-y/g) ?? []).length === 1 &&
+      (read(path.join(P, 'start-view.html')).match(/scroll-y/g) ?? []).length === 2,
+  );
   check(
     'le magasin : dialogue Quitter sur onQuitRequested',
     /onQuitRequested/.test(read(path.join(REPO, 'src', 'app', 'services', 'kairos', 'kairos.store.ts'))),
@@ -495,7 +503,7 @@ function spied(scenarioName, now = () => NOW0) {
   const api = new lib.MockKairosApi(scenarioName, now, 1);
   const calls = [];
   const wrapped = {};
-  for (const name of ['snapshot', 'start', 'switch', 'stop', 'pause', 'resume', 'subtaskChoices', 'setPopoverHeight', 'quit']) {
+  for (const name of ['snapshot', 'start', 'switch', 'stop', 'pause', 'resume', 'subtaskChoices', 'quit']) {
     wrapped[name] = (...args) => {
       calls.push(name);
       return wrapped.override?.[name] ? wrapped.override[name](...args) : api[name](...args);

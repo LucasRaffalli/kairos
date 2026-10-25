@@ -9,6 +9,8 @@ export const SCENARIOS = [
   'error-newer',
   'no-id',
   'long-names',
+  'long-day',
+  'many-recents',
   'no-recent',
   'claude-launched',
   'quit',
@@ -115,6 +117,18 @@ export function scenario(name: ScenarioName, now: number): Scenario {
       return { snapshot: running(noId, 'manual', null) };
     case 'long-names':
       return { snapshot: running(long, 'claude-desktop', `${MOCK_HOME}/Documents/un-dossier-au-nom-tres-long/et-son-sous-dossier-encore-plus-long`) };
+    case 'long-day': {
+      // Une journée très chargée : la liste du jour dépasse la fenêtre et défile.
+      const day = Array.from({ length: 24 }, (_, i) => entry(20 + i, i % 2 ? api : noId, now - (30 - i) * 1800, now - (30 - i) * 1800 + 1500));
+      const since = now - 2533;
+      const status: Status = { state: 'running', lot: refonte, since, duration: 2533, today_total: 2533 + 12 * HOUR, launched_by: 'manual', workdir: null };
+      return { snapshot: snapshotOf(status, [...day, entry(12, refonte, since, null)], recents([refonte, api, noId], now, refonte.id), now) };
+    }
+    case 'many-recents': {
+      // Huit lots récents (le maximum) : « Reprendre » dépasse sa zone et défile.
+      const many = Array.from({ length: 8 }, (_, i) => lot(30 + i, `1240685${1000 + i}`, 'Front', `Lot récent numéro ${i + 1}`));
+      return { snapshot: snapshotOf({ state: 'idle' }, earlier, recents(many, now, null), now) };
+    }
     case 'no-recent':
       return { snapshot: snapshotOf({ state: 'idle' }, [], [], now) };
     case 'paused': {

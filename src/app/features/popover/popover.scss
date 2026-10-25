@@ -1,10 +1,10 @@
 // Une vraie fenêtre macOS opaque : le cadre et les coins viennent de la fenêtre native, pas d'ici.
-// La fenêtre fait la hauteur du contenu ; quand Rust la plafonne à l'écran, on défile dedans.
+// Sa hauteur est fixe (celle de la fenêtre, dans `tauri.conf.json`) : le contenu ne la fait jamais
+// varier, les zones longues défilent dedans.
 :host {
   display: block;
-  min-height: 100vh;
-  max-height: 100vh;
-  overflow-y: auto;
+  height: 100vh;
+  overflow: hidden;
   background: var(--color-bg-popover);
 }
 
@@ -16,6 +16,7 @@ $titlebar-height: 28px;
   flex-direction: column;
   gap: var(--space-sm);
   width: 340px;
+  height: 100%;
   padding: 0 var(--space-md) var(--space-sm);
   background: var(--color-bg-popover);
   color: var(--color-text-primary);
@@ -29,11 +30,35 @@ $titlebar-height: 28px;
   margin: 0 calc(var(--space-md) * -1) calc(var(--space-sm) * -1);
 }
 
+// L'en-tête et le bandeau restent à leur place.
+k-popover-header,
+app-error-banner {
+  flex: none;
+}
+
+// La vue prend la place restante ; elle la distribue à ses zones (voir chaque vue).
 .view {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
   transition: opacity var(--transition-base);
+
+  > * {
+    flex: 1;
+    min-height: 0;
+  }
 
   &.stale {
     opacity: 0.45;
     filter: grayscale(1);
   }
+}
+
+// Le dialogue « Quitter » se centre dans la hauteur de la fenêtre.
+app-quit-dialog {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
 }

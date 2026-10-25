@@ -54,10 +54,6 @@ export class TauriKairosApi implements KairosApi {
     return subscribe('kairos://changed', callback);
   }
 
-  setPopoverHeight(pixels: number): Promise<void> {
-    return invoke('set_popover_height', { pixels });
-  }
-
   quit(stopLot: boolean): Promise<void> {
     // La commande déclare `rename_all = "snake_case"` : l'argument s'appelle `stop_lot`.
     return invoke('quit', { stop_lot: stopLot });

@@ -1,18 +1,18 @@
 //! Où poser la fenêtre : au premier affichage, centrée sous l'icône de la barre de menus mais
 //! entièrement visible, même quand l'icône est au bord de l'écran ou sur un second écran ; ensuite
-//! elle reste où l'utilisateur l'a mise, et ne bouge que pour ne pas sortir de l'écran quand sa
-//! hauteur change. Tout en pixels physiques, sans rien demander à Tauri : ce sont des fonctions
+//! elle reste où l'utilisateur l'a mise. Sa taille est fixe (`tauri.conf.json`), réduite seulement
+//! si l'écran est trop petit. Tout en pixels physiques, sans rien demander à Tauri : ce sont des fonctions
 //! pures, donc testables.
 
 /// Marge gardée entre le popover et le bord de l'écran.
 pub const EDGE_MARGIN: f64 = 8.0;
 /// Espace entre l'icône et le haut du popover.
 pub const GAP_BELOW_TRAY: f64 = 4.0;
-/// Le popover ne dépasse jamais la hauteur de l'écran moins cette marge (pixels logiques) :
-/// au-delà, son contenu défile.
+/// La fenêtre ne dépasse jamais la hauteur de l'écran moins cette marge (pixels logiques) : au-delà,
+/// son contenu défile.
 pub const SCREEN_HEIGHT_MARGIN: f64 = 80.0;
-/// Hauteur minimale du popover (pixels logiques), même si l'interface demande moins.
-pub const MIN_POPOVER_HEIGHT: f64 = 120.0;
+/// Hauteur minimale de la fenêtre (pixels logiques), même sur un écran minuscule.
+pub const MIN_WINDOW_HEIGHT: f64 = 120.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point {
@@ -48,25 +48,15 @@ pub fn popover_position(tray: Rect, popover: Size, screen: Rect) -> Point {
     Point { x, y }
 }
 
-/// Coin haut-gauche de la fenêtre après un changement de taille : le bord supérieur ne bouge pas
-/// (la fenêtre grandit vers le bas, sans se recentrer sous l'icône), sauf si elle sortirait de
-/// `screen` par le bas, auquel cas on la remonte juste assez.
-pub fn position_after_resize(top_left: Point, size: Size, screen: Rect) -> Point {
-    let max_y = (screen.y + screen.height - size.height - EDGE_MARGIN).max(screen.y);
-    Point {
-        x: top_left.x,
-        y: top_left.y.min(max_y),
+/// La hauteur de la fenêtre sur un écran de `screen_height` pixels (logiques tous les deux) : la
+/// hauteur fixe de `tauri.conf.json`, bornée à l'écran moins [`SCREEN_HEIGHT_MARGIN`] quand l'écran
+/// est trop petit pour elle.
+pub fn fit_height(height: f64, screen_height: f64) -> f64 {
+    let max = (screen_height - SCREEN_HEIGHT_MARGIN).max(MIN_WINDOW_HEIGHT);
+    if !height.is_finite() {
+        return MIN_WINDOW_HEIGHT;
     }
-}
-
-/// La hauteur du popover pour un contenu de `requested` pixels, sur un écran de
-/// `screen_height` pixels (logiques tous les deux).
-pub fn popover_height(requested: f64, screen_height: f64) -> f64 {
-    let max = (screen_height - SCREEN_HEIGHT_MARGIN).max(MIN_POPOVER_HEIGHT);
-    if !requested.is_finite() {
-        return MIN_POPOVER_HEIGHT;
-    }
-    requested.clamp(MIN_POPOVER_HEIGHT, max)
+    height.clamp(MIN_WINDOW_HEIGHT, max)
 }
 
 #[cfg(test)]
@@ -180,73 +170,24 @@ mod tests {
     }
 
     #[test]
-    fn the_height_follows_the_content_up_to_the_screen_minus_80() {
-        assert_eq!(popover_height(420.0, 900.0), 420.0);
-        assert_eq!(popover_height(1200.0, 900.0), 820.0);
-        assert_eq!(popover_height(10.0, 900.0), MIN_POPOVER_HEIGHT);
-        assert_eq!(popover_height(f64::NAN, 900.0), MIN_POPOVER_HEIGHT);
-        assert_eq!(popover_height(500.0, 150.0), MIN_POPOVER_HEIGHT);
+    fn the_fixed_height_fits_a_normal_screen_as_it_is() {
+        assert_eq!(fit_height(560.0, 900.0), 560.0);
+        let p = popover_position(
+            tray_at(700.0),
+            Size {
+                width: 340.0,
+                height: 560.0,
+            },
+            SCREEN,
+        );
+        assert!(p.y + 560.0 + EDGE_MARGIN <= 900.0);
     }
 
     #[test]
-    fn growing_keeps_the_top_left_corner_where_the_user_left_it() {
-        let top_left = Point { x: 300.0, y: 120.0 };
-        let grown = Size {
-            width: 340.0,
-            height: 500.0,
-        };
-        assert_eq!(position_after_resize(top_left, grown, SCREEN), top_left);
-    }
-
-    #[test]
-    fn growing_past_the_bottom_pulls_the_window_back_up() {
-        let top_left = Point { x: 300.0, y: 600.0 };
-        let grown = Size {
-            width: 340.0,
-            height: 500.0,
-        };
-        let at = position_after_resize(top_left, grown, SCREEN);
-        assert_eq!(at.x, 300.0);
-        assert_eq!(at.y, 900.0 - 500.0 - EDGE_MARGIN);
-    }
-
-    #[test]
-    fn a_window_taller_than_the_screen_sticks_to_the_top_edge() {
-        let top_left = Point { x: 300.0, y: 50.0 };
-        let huge = Size {
-            width: 340.0,
-            height: 2000.0,
-        };
-        assert_eq!(position_after_resize(top_left, huge, SCREEN).y, 0.0);
-    }
-
-    #[test]
-    fn shrinking_never_moves_the_window() {
-        let top_left = Point { x: 300.0, y: 600.0 };
-        let shrunk = Size {
-            width: 340.0,
-            height: 200.0,
-        };
-        assert_eq!(position_after_resize(top_left, shrunk, SCREEN), top_left);
-    }
-
-    #[test]
-    fn the_resize_is_judged_against_the_screen_the_window_is_on() {
-        let second = Rect {
-            x: 1440.0,
-            y: 0.0,
-            width: 1920.0,
-            height: 1080.0,
-        };
-        let top_left = Point {
-            x: 2000.0,
-            y: 700.0,
-        };
-        let grown = Size {
-            width: 340.0,
-            height: 500.0,
-        };
-        let at = position_after_resize(top_left, grown, second);
-        assert_eq!(at.y, 1080.0 - 500.0 - EDGE_MARGIN);
+    fn a_small_screen_bounds_the_height_to_the_usable_area() {
+        assert_eq!(fit_height(560.0, 600.0), 600.0 - SCREEN_HEIGHT_MARGIN);
+        assert_eq!(fit_height(560.0, 640.0), 560.0);
+        assert_eq!(fit_height(560.0, 150.0), MIN_WINDOW_HEIGHT);
+        assert_eq!(fit_height(f64::NAN, 900.0), MIN_WINDOW_HEIGHT);
     }
 }

@@ -1,9 +1,9 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterNextRender, computed, inject, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import { fill } from '@app/lang/fill';
 import { I18nService, injectT } from '@app/lang/i18n.service';
-import { KAIROS_API, type BridgeError } from '@app/services/kairos/kairos-api';
+import { type BridgeError } from '@app/services/kairos/kairos-api';
 import { KairosStore } from '@app/services/kairos/kairos.store';
 import { PopoverHeader } from '@app/ui';
 
@@ -18,9 +18,10 @@ import { StartView } from './start-view';
 /**
  * La fenêtre de Kairos : la barre de glisser, l'en-tête, le bandeau d'erreur et la vue choisie par
  * l'état du cœur (`pickView`). Seule la coquille range la fenêtre, et seulement sur Échap : aucune
- * action ne la ferme, et perdre le focus non plus (elle reste ouverte, côté Rust). Elle porte les
- * raccourcis ⌘↵ et ⌘., ajuste la hauteur de la fenêtre au contenu et montre le dialogue « Quitter »
- * quand le magasin l'ouvre.
+ * action ne la ferme, et perdre le focus non plus (elle reste ouverte, côté Rust). Sa hauteur est
+ * fixe (celle de la fenêtre, `tauri.conf.json`) : l'en-tête et les boutons restent en place, et
+ * seules les zones longues défilent. Elle porte les raccourcis ⌘↵ et ⌘. et montre le dialogue
+ * « Quitter » quand le magasin l'ouvre.
  */
 @Component({
   selector: 'app-popover',
@@ -32,11 +33,8 @@ import { StartView } from './start-view';
 })
 export class Popover {
   private readonly i18n = inject(I18nService);
-  private readonly api = inject(KAIROS_API);
   protected readonly store = inject(KairosStore);
   protected readonly t = injectT();
-
-  private readonly frame = viewChild.required<ElementRef<HTMLElement>>('frame');
 
   /**
    * « lun. 20 oct. » : le jour du cœur, dans la langue de l'interface. Il suit le relevé : le cœur
@@ -96,16 +94,6 @@ export class Popover {
     if (new URLSearchParams(window.location.search).get('scenario') === 'switching') {
       this.store.openSwitch();
     }
-
-    // La fenêtre prend la hauteur du contenu (Rust la plafonne à l'écran ; au-delà, on défile).
-    let observer: ResizeObserver | null = null;
-    afterNextRender(() => {
-      const frame = this.frame().nativeElement;
-      observer = new ResizeObserver(() => void this.api.setPopoverHeight(Math.ceil(frame.getBoundingClientRect().height)));
-      observer.observe(frame);
-    });
-
-    inject(DestroyRef).onDestroy(() => observer?.disconnect());
   }
 
   protected onKey(event: KeyboardEvent): void {

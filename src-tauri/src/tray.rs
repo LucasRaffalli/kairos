@@ -14,9 +14,7 @@ use tauri::{
 
 use crate::bridge;
 use crate::inflight::{InFlight, QUIT_WAIT};
-use crate::placement::{
-    popover_height, popover_position, position_after_resize, Point, Rect, Size,
-};
+use crate::placement::{fit_height, popover_position, Rect, Size};
 use crate::tray_font;
 
 const TRAY_ID: &str = "kairos";
@@ -209,31 +207,6 @@ pub fn app_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     Menu::with_items(app, &[&kairos, &edit])
 }
 
-/// Ajuste la hauteur de la fenêtre à son contenu (`pixels` : pixels CSS), plafonnée à l'écran.
-/// Le bord supérieur ne bouge pas : la fenêtre grandit vers le bas, là où l'utilisateur l'a mise.
-pub fn resize_popover(window: &WebviewWindow, pixels: f64) {
-    let scale = window.scale_factor().unwrap_or(1.0);
-    let (Ok(size), Ok(position), Some(screen)) = (
-        window.inner_size(),
-        window.outer_position(),
-        current_screen(window),
-    ) else {
-        return;
-    };
-    let height = (popover_height(pixels, screen.height / scale) * scale).round();
-    let resized = Size {
-        width: f64::from(size.width),
-        height,
-    };
-    let top_left = Point {
-        x: f64::from(position.x),
-        y: f64::from(position.y),
-    };
-    let at = position_after_resize(top_left, resized, screen);
-    let _ = window.set_size(PhysicalSize::new(resized.width, resized.height));
-    let _ = window.set_position(PhysicalPosition::new(at.x, at.y));
-}
-
 /// Le titre à côté de l'icône, tenu à jour par le fil de surveillance.
 #[derive(Default)]
 pub struct MenuTitle {
@@ -304,22 +277,23 @@ fn screen_of(window: &WebviewWindow, tray: Rect) -> Option<Rect> {
     Some(monitor_rect(&monitor))
 }
 
-fn current_screen(window: &WebviewWindow) -> Option<Rect> {
-    let monitor = window.current_monitor().ok()??;
-    Some(monitor_rect(&monitor))
-}
-
-/// Pose la fenêtre sous l'icône, dans l'écran où se trouve l'icône. Rend `false` si l'écran ou la
-/// taille de la fenêtre restent inconnus : elle n'est alors pas posée.
+/// Pose la fenêtre sous l'icône, dans l'écran où se trouve l'icône, après avoir ramené sa hauteur
+/// à l'écran si celui-ci est trop petit. Rend `false` si l'écran ou la taille de la fenêtre restent
+/// inconnus : elle n'est alors pas posée.
 fn place_under_icon(window: &WebviewWindow, tray_rect: tauri::Rect) -> bool {
     let scale = window.scale_factor().unwrap_or(1.0);
     let tray = physical_rect(tray_rect, scale);
-    let (Ok(size), Some(screen)) = (window.outer_size(), screen_of(window, tray)) else {
+    let (Ok(size), Some(screen)) = (window.inner_size(), screen_of(window, tray)) else {
         return false;
     };
+    let height =
+        (fit_height(f64::from(size.height) / scale, screen.height / scale) * scale).round();
+    if height != f64::from(size.height) {
+        let _ = window.set_size(PhysicalSize::new(f64::from(size.width), height));
+    }
     let popover = Size {
         width: f64::from(size.width),
-        height: f64::from(size.height),
+        height,
     };
     let at = popover_position(tray, popover, screen);
     window

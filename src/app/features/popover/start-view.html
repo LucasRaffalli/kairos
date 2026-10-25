@@ -9,7 +9,7 @@
   <k-section-title [title]="t()('switch.form')" />
 }
 
-<div class="steps">
+<div class="steps scroll-y">
   <section class="block">
     <div class="head">
       <k-section-title variant="step" [step]="1" [title]="t()('start.parent.title')" />
@@ -131,7 +131,7 @@
 
 @if (resumes().length) {
   <k-section-title [title]="t()('start.resume')" />
-  <div class="resumes">
+  <div class="resumes scroll-y">
     @for (lot of resumes(); track lot.id) {
       <k-quick-resume [name]="lotTitle(lot)" [id]="lot.parent_monday_id" [subtask]="lot.subtask" (resumed)="resume(lot)" />
     }
