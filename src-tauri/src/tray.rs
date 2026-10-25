@@ -17,6 +17,7 @@ use crate::inflight::{InFlight, QUIT_WAIT};
 use crate::placement::{
     popover_height, popover_position, position_after_resize, Point, Rect, Size,
 };
+use crate::tray_font;
 
 const TRAY_ID: &str = "kairos";
 pub const POPOVER: &str = "popover";
@@ -264,6 +265,7 @@ impl MenuTitle {
         if self.shown.as_ref() != Some(&title) {
             if let Some(tray) = app.tray_by_id(TRAY_ID) {
                 let _ = tray.set_title(title.as_deref());
+                tray_font::use_fixed_width_digits(&tray);
             }
             self.shown = Some(title);
         }

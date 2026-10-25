@@ -5,6 +5,7 @@ mod bridge;
 mod inflight;
 mod placement;
 mod tray;
+mod tray_font;
 mod watcher;
 
 use tauri::{ActivationPolicy, Manager};
