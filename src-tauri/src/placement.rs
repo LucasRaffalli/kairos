@@ -1,7 +1,8 @@
-//! Où poser le popover : centré sous l'icône de la barre de menus, mais
-//! toujours entièrement visible, même quand l'icône est au bord de l'écran ou
-//! sur un second écran. Tout en pixels physiques, sans rien demander à Tauri :
-//! c'est une fonction pure, donc testable.
+//! Où poser la fenêtre : au premier affichage, centrée sous l'icône de la barre de menus mais
+//! entièrement visible, même quand l'icône est au bord de l'écran ou sur un second écran ; ensuite
+//! elle reste où l'utilisateur l'a mise, et ne bouge que pour ne pas sortir de l'écran quand sa
+//! hauteur change. Tout en pixels physiques, sans rien demander à Tauri : ce sont des fonctions
+//! pures, donc testables.
 
 /// Marge gardée entre le popover et le bord de l'écran.
 pub const EDGE_MARGIN: f64 = 8.0;
@@ -45,6 +46,17 @@ pub fn popover_position(tray: Rect, popover: Size, screen: Rect) -> Point {
     let y = below.clamp(screen.y, max_y);
 
     Point { x, y }
+}
+
+/// Coin haut-gauche de la fenêtre après un changement de taille : le bord supérieur ne bouge pas
+/// (la fenêtre grandit vers le bas, sans se recentrer sous l'icône), sauf si elle sortirait de
+/// `screen` par le bas, auquel cas on la remonte juste assez.
+pub fn position_after_resize(top_left: Point, size: Size, screen: Rect) -> Point {
+    let max_y = (screen.y + screen.height - size.height - EDGE_MARGIN).max(screen.y);
+    Point {
+        x: top_left.x,
+        y: top_left.y.min(max_y),
+    }
 }
 
 /// La hauteur du popover pour un contenu de `requested` pixels, sur un écran de
@@ -174,5 +186,67 @@ mod tests {
         assert_eq!(popover_height(10.0, 900.0), MIN_POPOVER_HEIGHT);
         assert_eq!(popover_height(f64::NAN, 900.0), MIN_POPOVER_HEIGHT);
         assert_eq!(popover_height(500.0, 150.0), MIN_POPOVER_HEIGHT);
+    }
+
+    #[test]
+    fn growing_keeps_the_top_left_corner_where_the_user_left_it() {
+        let top_left = Point { x: 300.0, y: 120.0 };
+        let grown = Size {
+            width: 340.0,
+            height: 500.0,
+        };
+        assert_eq!(position_after_resize(top_left, grown, SCREEN), top_left);
+    }
+
+    #[test]
+    fn growing_past_the_bottom_pulls_the_window_back_up() {
+        let top_left = Point { x: 300.0, y: 600.0 };
+        let grown = Size {
+            width: 340.0,
+            height: 500.0,
+        };
+        let at = position_after_resize(top_left, grown, SCREEN);
+        assert_eq!(at.x, 300.0);
+        assert_eq!(at.y, 900.0 - 500.0 - EDGE_MARGIN);
+    }
+
+    #[test]
+    fn a_window_taller_than_the_screen_sticks_to_the_top_edge() {
+        let top_left = Point { x: 300.0, y: 50.0 };
+        let huge = Size {
+            width: 340.0,
+            height: 2000.0,
+        };
+        assert_eq!(position_after_resize(top_left, huge, SCREEN).y, 0.0);
+    }
+
+    #[test]
+    fn shrinking_never_moves_the_window() {
+        let top_left = Point { x: 300.0, y: 600.0 };
+        let shrunk = Size {
+            width: 340.0,
+            height: 200.0,
+        };
+        assert_eq!(position_after_resize(top_left, shrunk, SCREEN), top_left);
+    }
+
+    #[test]
+    fn the_resize_is_judged_against_the_screen_the_window_is_on() {
+        let second = Rect {
+            x: 1440.0,
+            y: 0.0,
+            width: 1920.0,
+            height: 1080.0,
+        };
+        let top_left = Point {
+            x: 2000.0,
+            y: 700.0,
+        };
+        let grown = Size {
+            width: 340.0,
+            height: 500.0,
+        };
+        let at = position_after_resize(top_left, grown, second);
+        assert_eq!(at.y, 1080.0 - 500.0 - EDGE_MARGIN);
     }
 }

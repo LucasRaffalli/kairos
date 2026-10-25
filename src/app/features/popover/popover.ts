@@ -16,10 +16,11 @@ import { RunningView } from './running-view';
 import { StartView } from './start-view';
 
 /**
- * Le popover de la barre de menus : l'en-tête, le bandeau d'erreur et la vue choisie par l'état du
- * cœur (`pickView`). Seule la coquille ferme la fenêtre, et seulement sur Échap : aucune action ne
- * la ferme (perdre le focus la cache, côté Rust). Elle porte les raccourcis ⌘↵ et ⌘., ajuste la
- * hauteur de la fenêtre au contenu et montre le dialogue « Quitter » quand le magasin l'ouvre.
+ * La fenêtre de Kairos : la barre de glisser, l'en-tête, le bandeau d'erreur et la vue choisie par
+ * l'état du cœur (`pickView`). Seule la coquille range la fenêtre, et seulement sur Échap : aucune
+ * action ne la ferme, et perdre le focus non plus (elle reste ouverte, côté Rust). Elle porte les
+ * raccourcis ⌘↵ et ⌘., ajuste la hauteur de la fenêtre au contenu et montre le dialogue « Quitter »
+ * quand le magasin l'ouvre.
  */
 @Component({
   selector: 'app-popover',
@@ -116,7 +117,7 @@ export class Popover {
       if (this.store.quitting()) {
         this.store.cancelQuit();
       } else if ('__TAURI_INTERNALS__' in window) {
-        // Côté Rust, une demande de fermeture du popover le cache sans le détruire.
+        // Côté Rust, une demande de fermeture range la fenêtre sans la détruire.
         void getCurrentWindow().close();
       }
       return;

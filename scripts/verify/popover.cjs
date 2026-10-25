@@ -419,6 +419,22 @@ check('relancer un lot sans ID : par son nom', r3.parent_monday_id === null && r
   // long-names : le badge de sous-tâche ne chasse pas les ID de la ligne.
   check('Minuteur : le badge de sous-tâche est plafonné', /\.ticket\s+k-badge\s*\{[^}]*max-width:\s*50%/.test(read(path.join(P, 'running-view.scss'))));
 
+  // Une vraie fenêtre qui reste ouverte (changement du 25 octobre) : lue dans les sources, car une
+  // fenêtre macOS ne se pilote pas d'ici.
+  check('la barre de glisser porte data-tauri-drag-region', /<div class="titlebar" data-tauri-drag-region><\/div>/.test(shellHtml));
+  const conf = JSON.parse(read(path.join(REPO, 'src-tauri', 'tauri.conf.json'))).app.windows[0];
+  check('fenêtre : boutons natifs en surimpression, titre caché', conf.decorations === true && conf.titleBarStyle === 'Overlay' && conf.hiddenTitle === true);
+  check('fenêtre : opaque, ordinaire, sans Dock', conf.transparent === false && conf.alwaysOnTop === false && conf.skipTaskbar === true);
+  check('fenêtre : ni réduire (pas d’icône de Dock) ni zoom', conf.minimizable === false && conf.maximizable === false && conf.resizable === false);
+  const capabilities = JSON.parse(read(path.join(REPO, 'src-tauri', 'capabilities', 'default.json'))).permissions;
+  check('droit de glisser la fenêtre', capabilities.includes('core:window:allow-start-dragging'));
+  const rust = (file) => read(path.join(REPO, 'src-tauri', 'src', file)).split('#[cfg(test)]')[0];
+  const tray = rust('tray.rs');
+  check('plus de fermeture sur perte de focus', !/Focused|LastBlur|HideAfterBlur/.test(tray + rust('lib.rs')));
+  check('la demande de fermeture masque sans détruire', /CloseRequested[\s\S]*prevent_close\(\)[\s\S]*\.hide\(\)/.test(tray));
+  check('⌘W du menu de l’app masque la fenêtre', /"cmd\+w"/.test(tray) && !/close_window\(/.test(tray));
+  check('la fenêtre n’est jamais détruite', !/\.destroy\(|\.close\(\)/.test(tray));
+
   // Les clés de traduction utilisées par les vues existent en fr ET en en.
   const keysOf = (file) => new Set([...read(path.join(REPO, 'src', 'app', 'lang', file)).matchAll(/^\s*'([\w.-]+)':/gm)].map((m) => m[1]));
   const fr = keysOf('fr.ts');

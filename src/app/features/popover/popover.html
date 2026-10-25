@@ -1,4 +1,6 @@
 <div class="frame" #frame>
+  <!-- Barre fine pour glisser la fenêtre ; les boutons natifs (rouge, jaune, vert) se posent par-dessus, à gauche. -->
+  <div class="titlebar" data-tauri-drag-region></div>
   @if (store.quitting() && quitSummary(); as summary) {
     <app-quit-dialog [summary]="summary" (stopAndQuit)="store.quit(true)" (keepAndQuit)="store.quit(false)" (cancelled)="store.cancelQuit()" />
   } @else {

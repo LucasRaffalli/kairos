@@ -1,20 +1,32 @@
+// Une vraie fenêtre macOS opaque : le cadre et les coins viennent de la fenêtre native, pas d'ici.
 // La fenêtre fait la hauteur du contenu ; quand Rust la plafonne à l'écran, on défile dedans.
 :host {
   display: block;
+  min-height: 100vh;
   max-height: 100vh;
   overflow-y: auto;
+  background: var(--color-bg-popover);
 }
+
+// Sous la barre de titre en surimpression : les boutons natifs occupent les 28 premiers pixels.
+$titlebar-height: 28px;
 
 .frame {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
   width: 340px;
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-md);
+  padding: 0 var(--space-md) var(--space-sm);
   background: var(--color-bg-popover);
   color: var(--color-text-primary);
+}
+
+// La zone de glissement. Sa marge négative reprend l'espace du `gap` : le contenu ne descend que
+// de la hauteur de la barre moins cet espace.
+.titlebar {
+  flex: none;
+  height: $titlebar-height;
+  margin: 0 calc(var(--space-md) * -1) calc(var(--space-sm) * -1);
 }
 
 .view {

@@ -1,7 +1,7 @@
-//! L'icône de la barre de menus : un clic montre ou cache le popover, le titre affiche la
-//! durée du lot, « Quitter Kairos » demande quoi faire d'un lot en cours.
+//! L'icône de la barre de menus : un clic montre, ramène au premier plan ou range la fenêtre, le
+//! titre affiche la durée du lot, « Quitter Kairos » demande quoi faire d'un lot en cours.
 
-use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use kairos_core::clock::{Clock, SystemClock};
 use kairos_core::model::Status;
@@ -14,52 +14,43 @@ use tauri::{
 
 use crate::bridge;
 use crate::inflight::{InFlight, QUIT_WAIT};
-use crate::placement::{popover_height, popover_position, Rect, Size};
+use crate::placement::{
+    popover_height, popover_position, position_after_resize, Point, Rect, Size,
+};
 
 const TRAY_ID: &str = "kairos";
 pub const POPOVER: &str = "popover";
 /// L'élément « Quitter Kairos », dans le menu de l'icône comme dans celui de l'app.
 const QUIT_ID: &str = "quit";
+/// L'élément « Fermer la fenêtre » (⌘W) du menu de l'app : il range la fenêtre, jamais ne la détruit.
+const CLOSE_ID: &str = "close-window";
 
 /// Émis quand on quitte avec un lot en cours : le popover affiche le dialogue « Quitter ».
 pub const QUIT_REQUESTED: &str = "kairos://quit-requested";
 
-/// Un clic sur l'icône retire d'abord le focus au popover (il se masque), puis
-/// arrive : sans cette fenêtre, le même clic le fermerait puis le rouvrirait.
-pub const BLUR_CLICK_WINDOW: Duration = Duration::from_millis(250);
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToggleAction {
+    /// La fenêtre est rangée : l'afficher et lui donner le focus.
     Show,
+    /// Elle est visible mais derrière d'autres fenêtres : la ramener devant, sans la ranger.
+    Raise,
+    /// Elle est visible et au premier plan : la ranger.
     Hide,
 }
 
-/// Que faire d'un clic sur l'icône ? `just_blurred` : le popover vient de
-/// perdre le focus à cause de ce même clic.
-pub fn toggle_action(visible: bool, just_blurred: bool) -> ToggleAction {
-    if visible || just_blurred {
-        ToggleAction::Hide
-    } else {
-        ToggleAction::Show
+/// Que faire d'un clic sur l'icône ? `focused` : la fenêtre est au premier plan, avec le focus.
+pub fn toggle_action(visible: bool, focused: bool) -> ToggleAction {
+    match (visible, focused) {
+        (false, _) => ToggleAction::Show,
+        (true, false) => ToggleAction::Raise,
+        (true, true) => ToggleAction::Hide,
     }
 }
 
-/// Instant où le popover a perdu le focus pour la dernière fois.
+/// Vrai une fois la fenêtre posée sous l'icône. Ensuite elle garde la place où l'utilisateur l'a
+/// mise, le temps de la session : rien n'est écrit sur disque.
 #[derive(Default)]
-pub struct LastBlur(pub std::sync::Mutex<Option<Instant>>);
-
-impl LastBlur {
-    pub fn mark(&self) {
-        *self.0.lock().expect("verrou LastBlur") = Some(Instant::now());
-    }
-
-    pub fn is_recent(&self) -> bool {
-        self.0
-            .lock()
-            .expect("verrou LastBlur")
-            .is_some_and(|at| at.elapsed() < BLUR_CLICK_WINDOW)
-    }
-}
+pub struct Placed(AtomicBool);
 
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, QUIT_ID, "Quitter Kairos", true, Some("cmd+q"))?;
@@ -73,10 +64,14 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         // Le menu s'ouvre au clic droit seulement : le clic gauche est pour le popover.
         .show_menu_on_left_click(false)
-        // Ce gestionnaire est global : il reçoit aussi le « Quitter Kairos » du menu de l'app.
+        // Ce gestionnaire est global : il reçoit aussi les éléments du menu de l'app.
         .on_menu_event(|app, event| {
             if event.id() == QUIT_ID {
                 request_quit(app);
+            } else if event.id() == CLOSE_ID {
+                if let Some(window) = app.get_webview_window(POPOVER) {
+                    let _ = window.hide();
+                }
             }
         })
         .on_tray_icon_event(|tray, event| {
@@ -91,17 +86,16 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
                 let Some(window) = app.get_webview_window(POPOVER) else {
                     return;
                 };
-                let blurred = app.state::<LastBlur>().is_recent();
                 let visible = window.is_visible().unwrap_or(false);
-                match toggle_action(visible, blurred) {
+                let focused = window.is_focused().unwrap_or(false);
+                match toggle_action(visible, focused) {
                     ToggleAction::Hide => {
                         let _ = window.hide();
                     }
-                    ToggleAction::Show => {
-                        place(&window, rect);
-                        let _ = window.show();
+                    ToggleAction::Raise => {
                         let _ = window.set_focus();
                     }
+                    ToggleAction::Show => reveal(&window, Some(rect)),
                 }
             }
         })
@@ -109,13 +103,24 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Montre le popover sous l'icône et lui donne le focus (seconde instance, dialogue « Quitter »).
+/// Affiche la fenêtre et lui donne le focus (seconde instance, dialogue « Quitter »). Elle reste
+/// où elle est si elle a déjà été posée.
 pub fn show_popover(app: &AppHandle) {
-    let Some(window) = app.get_webview_window(POPOVER) else {
-        return;
-    };
-    if let Some(rect) = tray_rect(app) {
-        place(&window, rect);
+    if let Some(window) = app.get_webview_window(POPOVER) {
+        reveal(&window, tray_rect(app));
+    }
+}
+
+/// Montre la fenêtre. Au tout premier affichage, elle se centre sous l'icône ; les suivants la
+/// laissent où l'utilisateur l'a mise.
+fn reveal(window: &WebviewWindow, tray: Option<tauri::Rect>) {
+    let placed = window.state::<Placed>();
+    if !placed.0.load(Ordering::Relaxed) {
+        if let Some(tray) = tray {
+            if place_under_icon(window, tray) {
+                placed.0.store(true, Ordering::Relaxed);
+            }
+        }
     }
     let _ = window.show();
     let _ = window.set_focus();
@@ -167,56 +172,25 @@ pub fn exit_when_idle(app: &AppHandle) {
     app.exit(0);
 }
 
-/// Ce qui arrive à la fenêtre du popover, réduit à ce qui compte pour elle.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PopoverEvent {
-    LostFocus,
-    CloseRequested,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PopoverReaction {
-    /// Perdre le focus ferme le popover, comme tout popover de macOS (et on note l'instant,
-    /// voir [`BLUR_CLICK_WINDOW`]).
-    HideAfterBlur,
-    /// Le popover n'est jamais détruit : sans lui, l'icône ne répondrait plus. On le masque.
-    KeepAndHide,
-}
-
-pub fn popover_reaction(event: PopoverEvent) -> PopoverReaction {
-    match event {
-        PopoverEvent::LostFocus => PopoverReaction::HideAfterBlur,
-        PopoverEvent::CloseRequested => PopoverReaction::KeepAndHide,
-    }
-}
-
-/// Branche ces réactions sur la fenêtre du popover.
+/// Branche la fermeture sur la fenêtre : le bouton rouge (ou ⌘W, ou Échap) la range sans jamais
+/// la détruire, car sans elle l'icône ne répondrait plus. Perdre le focus ne fait rien.
 pub fn watch_popover(window: &WebviewWindow) {
     let handle = window.clone();
     window.on_window_event(move |event| {
-        let (event, api) = match event {
-            WindowEvent::Focused(false) => (PopoverEvent::LostFocus, None),
-            WindowEvent::CloseRequested { api, .. } => (PopoverEvent::CloseRequested, Some(api)),
-            _ => return,
-        };
-        match popover_reaction(event) {
-            PopoverReaction::HideAfterBlur => handle.app_handle().state::<LastBlur>().mark(),
-            PopoverReaction::KeepAndHide => {
-                if let Some(api) = api {
-                    api.prevent_close();
-                }
-            }
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = handle.hide();
         }
-        let _ = handle.hide();
     });
 }
 
-/// Le menu de l'app (barre de menus macOS, active quand le popover a le focus) : « Quitter
-/// Kairos » (⌘Q) passe par [`request_quit`], comme le menu de l'icône ; le menu Édition fait
-/// marcher ⌘C, ⌘V, ⌘A, ⌘Z dans les champs. Pas de « Fermer la fenêtre » : ⌘W ne fait rien.
+/// Le menu de l'app (barre de menus macOS, active quand la fenêtre a le focus) : « Quitter
+/// Kairos » (⌘Q) passe par [`request_quit`], comme le menu de l'icône ; « Fermer la fenêtre » (⌘W)
+/// la range ; le menu Édition fait marcher ⌘C, ⌘V, ⌘A, ⌘Z dans les champs.
 pub fn app_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let quit = MenuItem::with_id(app, QUIT_ID, "Quitter Kairos", true, Some("cmd+q"))?;
-    let kairos = Submenu::with_items(app, "Kairos", true, &[&quit])?;
+    let close = MenuItem::with_id(app, CLOSE_ID, "Fermer la fenêtre", true, Some("cmd+w"))?;
+    let kairos = Submenu::with_items(app, "Kairos", true, &[&close, &quit])?;
     let edit = Submenu::with_items(
         app,
         "Édition",
@@ -234,33 +208,29 @@ pub fn app_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     Menu::with_items(app, &[&kairos, &edit])
 }
 
-/// Ajuste la hauteur du popover à son contenu (`pixels` : pixels CSS), plafonnée à l'écran,
-/// en le gardant sous l'icône.
+/// Ajuste la hauteur de la fenêtre à son contenu (`pixels` : pixels CSS), plafonnée à l'écran.
+/// Le bord supérieur ne bouge pas : la fenêtre grandit vers le bas, là où l'utilisateur l'a mise.
 pub fn resize_popover(window: &WebviewWindow, pixels: f64) {
     let scale = window.scale_factor().unwrap_or(1.0);
-    let (Ok(size), Ok(position)) = (window.outer_size(), window.outer_position()) else {
-        return;
-    };
-    let tray = tray_rect(window.app_handle());
-    let screen = tray
-        .and_then(|rect| screen_of(window, physical_rect(rect, scale)))
-        .or_else(|| current_screen(window));
-    let Some(screen) = screen else {
+    let (Ok(size), Ok(position), Some(screen)) = (
+        window.inner_size(),
+        window.outer_position(),
+        current_screen(window),
+    ) else {
         return;
     };
     let height = (popover_height(pixels, screen.height / scale) * scale).round();
-    let popover = Size {
+    let resized = Size {
         width: f64::from(size.width),
         height,
     };
-    let _ = window.set_size(PhysicalSize::new(popover.width, popover.height));
-    match tray {
-        Some(rect) => place_sized(window, rect, popover),
-        // Sans la position de l'icône, on garde le coin haut-gauche où il est.
-        None => {
-            let _ = window.set_position(position);
-        }
-    }
+    let top_left = Point {
+        x: f64::from(position.x),
+        y: f64::from(position.y),
+    };
+    let at = position_after_resize(top_left, resized, screen);
+    let _ = window.set_size(PhysicalSize::new(resized.width, resized.height));
+    let _ = window.set_position(PhysicalPosition::new(at.x, at.y));
 }
 
 /// Le titre à côté de l'icône, tenu à jour par le fil de surveillance.
@@ -337,28 +307,22 @@ fn current_screen(window: &WebviewWindow) -> Option<Rect> {
     Some(monitor_rect(&monitor))
 }
 
-/// Pose le popover sous l'icône, dans l'écran où se trouve l'icône.
-fn place(window: &WebviewWindow, tray_rect: tauri::Rect) {
-    let Ok(size) = window.outer_size() else {
-        return;
+/// Pose la fenêtre sous l'icône, dans l'écran où se trouve l'icône. Rend `false` si l'écran ou la
+/// taille de la fenêtre restent inconnus : elle n'est alors pas posée.
+fn place_under_icon(window: &WebviewWindow, tray_rect: tauri::Rect) -> bool {
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let tray = physical_rect(tray_rect, scale);
+    let (Ok(size), Some(screen)) = (window.outer_size(), screen_of(window, tray)) else {
+        return false;
     };
     let popover = Size {
         width: f64::from(size.width),
         height: f64::from(size.height),
     };
-    place_sized(window, tray_rect, popover);
-}
-
-/// Comme [`place`], pour un popover de taille connue (pixels physiques) : juste après un
-/// redimensionnement, la taille de la fenêtre n'est pas encore à jour.
-fn place_sized(window: &WebviewWindow, tray_rect: tauri::Rect, popover: Size) {
-    let scale = window.scale_factor().unwrap_or(1.0);
-    let tray = physical_rect(tray_rect, scale);
-    let Some(screen) = screen_of(window, tray) else {
-        return;
-    };
     let at = popover_position(tray, popover, screen);
-    let _ = window.set_position(PhysicalPosition::new(at.x, at.y));
+    window
+        .set_position(PhysicalPosition::new(at.x, at.y))
+        .is_ok()
 }
 
 #[cfg(test)]
@@ -368,31 +332,20 @@ mod tests {
     use kairos_core::model::LotView;
 
     #[test]
-    fn a_visible_popover_is_hidden_by_a_click() {
-        assert_eq!(toggle_action(true, false), ToggleAction::Hide);
-    }
-
-    #[test]
-    fn a_hidden_popover_is_shown_by_a_click() {
+    fn a_hidden_window_is_shown_by_a_click() {
         assert_eq!(toggle_action(false, false), ToggleAction::Show);
+        // Une fenêtre masquée n'a pas le focus ; si le système dit autre chose, elle reste à montrer.
+        assert_eq!(toggle_action(false, true), ToggleAction::Show);
     }
 
     #[test]
-    fn a_popover_that_just_lost_focus_to_this_click_stays_closed() {
-        assert_eq!(toggle_action(false, true), ToggleAction::Hide);
+    fn a_window_behind_others_is_brought_forward_not_hidden() {
+        assert_eq!(toggle_action(true, false), ToggleAction::Raise);
     }
 
     #[test]
-    fn closing_the_popover_only_hides_it() {
-        // ⌘W ou une demande de fermeture : détruire la fenêtre laisserait l'icône sans popover.
-        assert_eq!(
-            popover_reaction(PopoverEvent::CloseRequested),
-            PopoverReaction::KeepAndHide
-        );
-        assert_eq!(
-            popover_reaction(PopoverEvent::LostFocus),
-            PopoverReaction::HideAfterBlur
-        );
+    fn a_window_in_front_is_hidden_by_a_click() {
+        assert_eq!(toggle_action(true, true), ToggleAction::Hide);
     }
 
     #[test]
@@ -443,13 +396,5 @@ mod tests {
             launched_by: None,
             workdir: None,
         }
-    }
-
-    #[test]
-    fn the_blur_is_remembered_only_briefly() {
-        let blur = LastBlur::default();
-        assert!(!blur.is_recent());
-        blur.mark();
-        assert!(blur.is_recent());
     }
 }

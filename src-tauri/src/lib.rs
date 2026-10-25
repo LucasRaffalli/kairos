@@ -17,10 +17,10 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .manage(tray::LastBlur::default())
+        .manage(tray::Placed::default())
         .manage(inflight::InFlight::default())
         // Remplace le menu par défaut de macOS : son « Quitter » (⌘Q) fermerait l'app sans
-        // passer par le dialogue, son « Fermer la fenêtre » (⌘W) détruirait le popover.
+        // passer par le dialogue, son « Fermer la fenêtre » (⌘W) détruirait la fenêtre.
         .menu(tray::app_menu)
         .invoke_handler(tauri::generate_handler![
             bridge::commands::snapshot,
