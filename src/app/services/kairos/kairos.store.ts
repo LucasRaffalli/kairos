@@ -6,6 +6,12 @@ import { pickView, type ViewName } from '@app/features/popover/logic/view';
 
 import { toBridgeError, type BridgeError, type KairosApi, type LotView, type Snapshot, type StartRequest, type SubtaskChoices } from './kairos-api';
 
+/** « AAAA-MM-JJ » du jour local d'un instant (millisecondes) : heure d'été et fuseau de la machine compris. */
+function localDay(ms: number): string {
+  const date = new Date(ms);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 /** Les refus d'un écran en retard sur le cœur : la relecture dit si l'action est devenue sans objet. */
 const OUTDATED_SCREEN = new Set(['already_running', 'nothing_running', 'nothing_to_resume']);
 
@@ -39,6 +45,8 @@ export class KairosStore {
   private readonly nowMs = signal(0);
   /** Avance du cœur sur le navigateur à la réception du dernier relevé, en millisecondes. */
   private offsetMs = 0;
+  /** Le jour local pour lequel une relecture « changement de jour » est déjà partie (une seule par jour). */
+  private refreshedFor: string | null = null;
   private readonly timer: ReturnType<typeof setInterval>;
   private readonly unsubscribe: () => void;
   private readonly unsubscribeQuit: () => void;
@@ -100,9 +108,30 @@ export class KairosStore {
     this.unsubscribeQuit = api.onQuitRequested(() => this._quitting.set(true));
   }
 
-  /** Bat une seconde : relit l'horloge locale. Appelé par le minuteur interne (et par les tests). */
+  /**
+   * Bat une seconde : relit l'horloge locale. Appelé par le minuteur interne, par la fenêtre quand
+   * elle reprend le focus (et par les tests). Si le jour local a changé depuis le relevé, relit :
+   * à minuit rien n'est écrit en base, donc rien d'autre ne le dirait.
+   */
   tick(): void {
     this.nowMs.set(this.now());
+    this.refreshOnNewDay();
+  }
+
+  /**
+   * Relit le cœur quand le jour local (à l'heure du cœur) n'est plus celui du relevé. Une seule
+   * fois par jour : si le cœur reste sur l'ancien jour (horloges en désaccord), on ne le harcèle pas.
+   */
+  private refreshOnNewDay(): void {
+    const shown = this._snapshot()?.today.date;
+    if (!shown) {
+      return;
+    }
+    const day = localDay(this.nowMs() + this.offsetMs);
+    if (day !== shown && day !== this.refreshedFor) {
+      this.refreshedFor = day;
+      void this.reload();
+    }
   }
 
   /** Libère le minuteur et l'écoute des changements. */
@@ -116,7 +145,7 @@ export class KairosStore {
   async reload(): Promise<void> {
     try {
       const snapshot = await this.api.snapshot();
-      this.tick();
+      this.nowMs.set(this.now());
       this.offsetMs = snapshot.server_time * 1000 - this.nowMs();
       this._snapshot.set(snapshot);
       this._stale.set(false);

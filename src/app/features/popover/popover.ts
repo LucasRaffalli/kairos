@@ -29,7 +29,7 @@ import { StartView } from './start-view';
   templateUrl: './popover.html',
   styleUrl: './popover.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(document:keydown)': 'onKey($event)' },
+  host: { '(document:keydown)': 'onKey($event)', '(window:focus)': 'store.tick()' },
 })
 export class Popover {
   private readonly i18n = inject(I18nService);

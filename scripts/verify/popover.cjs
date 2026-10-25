@@ -1065,6 +1065,49 @@ function spied(scenarioName, now = () => NOW0) {
     store.dispose();
   }
 
+  // Minuit : sans écriture en base, rien ne dit au magasin que le jour a changé ; il relit seul,
+  // une seule fois par jour, et la date et le total repartent du nouveau jour.
+  {
+    let t = new Date(2026, 9, 23, 23, 59, 58).getTime();
+    const { api, calls } = spied('running', () => t);
+    const store = new lib.KairosStore(api, () => t);
+    await store.reload();
+    check('minuit : la date affichée est celle du jour', store.snapshot().today.date === '2026-10-23', store.snapshot().today.date);
+    const before = calls.filter((c) => c === 'snapshot').length;
+    t += 1000;
+    store.tick();
+    await tick();
+    check('minuit : avant minuit, aucune relecture', calls.filter((c) => c === 'snapshot').length === before);
+    t += 2000; // 00:00:01
+    store.tick();
+    await tick();
+    check('minuit : une relecture au changement de jour', calls.filter((c) => c === 'snapshot').length === before + 1);
+    check('minuit : la date change', store.snapshot().today.date === '2026-10-24', store.snapshot().today.date);
+    for (let i = 0; i < 3; i++) {
+      t += 1000;
+      store.tick();
+      await tick();
+    }
+    check('minuit : pas de seconde relecture', calls.filter((c) => c === 'snapshot').length === before + 1);
+    store.dispose();
+  }
+  {
+    // Le jour se juge à l'heure du cœur : avec un cœur en retard de 1,5 s sur le navigateur, la
+    // relecture attend que le cœur passe minuit, puis ne part qu'une fois.
+    let t = new Date(2026, 9, 23, 23, 59, 58).getTime();
+    const { api, calls } = spied('running', () => t - 1500);
+    const store = new lib.KairosStore(api, () => t);
+    await store.reload();
+    for (let i = 0; i < 6; i++) {
+      t += 1000;
+      store.tick();
+      await tick();
+    }
+    check('minuit : un cœur en retard n’est relu qu’une fois, à son minuit', calls.filter((c) => c === 'snapshot').length === 2, String(calls.length));
+    check('minuit : cœur en retard, la date change', store.snapshot().today.date === '2026-10-24', store.snapshot().today.date);
+    store.dispose();
+  }
+
   if (fail) {
     console.log(`${fail} échec(s)`);
     process.exit(1);
