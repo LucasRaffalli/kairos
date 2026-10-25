@@ -18,14 +18,14 @@ export type ScenarioName = (typeof SCENARIOS)[number];
 export const isScenario = (value: string | null): value is ScenarioName => SCENARIOS.some((name) => name === value);
 
 /** Un scénario : l'état de départ du faux pont, et les refus qu'il oppose ensuite. */
-export interface Scenario {
+interface Scenario {
   snapshot: Snapshot;
   /** Refus rendu à tous les appels suivant le premier `snapshot` (base verrouillée ou trop récente). */
   failure?: BridgeError;
 }
 
 const HOUR = 3600;
-export const MOCK_HOME = '/Users/lucas';
+const MOCK_HOME = '/Users/lucas';
 const LOCKED: BridgeError = { code: 'db_unavailable', message: "La base de Kairos est inaccessible : un autre programme l'utilise. Réessaie dans un instant." };
 const NEWER: BridgeError = { code: 'db_newer', message: "La base de Kairos a été écrite par une version plus récente de l'app : mets l'app à jour." };
 

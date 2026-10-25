@@ -1,3 +1,6 @@
+import type { TranslationKey } from '@app/lang/i18n.service';
+import type { BridgeError } from '@app/services/kairos/kairos-api';
+
 import type { FormDraft } from './form';
 
 /** Les champs du formulaire sous lesquels un refus du cœur peut s'afficher. */
@@ -50,3 +53,30 @@ export function errorField(code: string, form: FormDraft): ErrorField | null {
 
 /** La base est inaccessible ou trop récente : on garde la dernière vue, grisée. */
 export const isStaleCode = (code: string): boolean => code === 'db_unavailable' || code === 'db_newer';
+
+/**
+ * Le texte à montrer pour chaque refus du cœur visible dans l'app. Les messages du cœur sont en
+ * français et parlent de la ligne de commande (`kairos switch`, `--at`) : l'app a les siens.
+ */
+export const ERROR_KEYS: Readonly<Record<string, TranslationKey>> = {
+  already_running: 'error.already_running',
+  nothing_running: 'error.nothing_running',
+  nothing_to_resume: 'error.nothing_to_resume',
+  same_lot: 'error.same_lot',
+  in_future: 'error.in_future',
+  too_old: 'error.too_old',
+  clock_behind: 'error.clock_behind',
+  invalid_monday_id: 'error.invalid_monday_id',
+  invalid_name: 'error.invalid_name',
+  invalid_time: 'error.invalid_time',
+  reference_missing: 'error.reference_missing',
+  db_unavailable: 'error.db_unavailable',
+  db_newer: 'error.db_newer',
+  overlap: 'error.overlap',
+  internal: 'error.internal',
+};
+
+/** Le refus, dans la langue de l'interface ; le message du cœur pour un code que l'app ne connaît pas. */
+export function errorMessage(error: BridgeError, t: (key: TranslationKey) => string): string {
+  return Object.hasOwn(ERROR_KEYS, error.code) ? t(ERROR_KEYS[error.code]) : error.message;
+}

@@ -32,7 +32,9 @@ export class MockKairosApi implements KairosApi {
     if (this.failure && this.served++ > 0) {
       throw this.failure;
     }
-    return { ...this.current, server_time: secondsOf(this.nowMs()) };
+    const now = secondsOf(this.nowMs());
+    // Le jour et les totaux suivent l'horloge, comme ceux du cœur (qui change de jour à minuit).
+    return { ...this.current, today: dayOf(this.current.today.entries, now), server_time: now };
   }
 
   async start(request: StartRequest): Promise<void> {

@@ -6,7 +6,7 @@ import { KairosStore } from '@app/services/kairos/kairos.store';
 import { Button, Chip, Field, Icon, QuickResume, RecentPill, SectionTitle } from '@app/ui';
 
 import { formatClock } from './logic/clock';
-import { errorField, type ErrorField } from './logic/errors';
+import { errorField, errorMessage, type ErrorField } from './logic/errors';
 import { canSubmit, subtaskChips, type FormDraft } from './logic/form';
 import { lotTitle, quickResumes, recentParents } from './logic/view';
 
@@ -75,16 +75,14 @@ export class StartView {
     // Changer d'ID de parent oublie aussitôt les puces de l'ancien, puis redemande celles du
     // nouveau (les sous-tâches propres à ce parent) après une courte pause de frappe.
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let asked: string | null | undefined;
     effect(() => {
       const parent = this.form().parentId.trim() || null;
       clearTimeout(timer);
-      if (parent !== asked) {
+      // Les puces en place sont celles de ce parent : rien à faire. Sinon (y compris un chiffre
+      // tapé puis effacé avant la fin de la pause) on les oublie et on les redemande.
+      if (parent !== this.store.choicesParent) {
         this.store.resetChoices();
-        timer = setTimeout(() => {
-          asked = parent;
-          void this.store.loadChoices(parent);
-        }, CHOICES_DELAY_MS);
+        timer = setTimeout(() => void this.store.loadChoices(parent), CHOICES_DELAY_MS);
       }
     });
     inject(DestroyRef).onDestroy(() => clearTimeout(timer));
@@ -124,7 +122,7 @@ export class StartView {
   /** Le refus du cœur à afficher sous ce champ, s'il le vise (sinon il est dans le bandeau). */
   protected fieldError(field: ErrorField): string | null {
     const error = this.store.error();
-    return error && errorField(error.code, this.form()) === field ? error.message : null;
+    return error && errorField(error.code, this.form()) === field ? errorMessage(error, this.t()) : null;
   }
 
   /** Sous « Début » : le refus du cœur, sinon un début mal écrit (seule règle jugée ici). */

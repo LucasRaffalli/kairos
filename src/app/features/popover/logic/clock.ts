@@ -14,10 +14,15 @@ export function formatHm(seconds: number): string {
   return `${Math.floor(minutes / 60)} h ${pad(minutes % 60)}`;
 }
 
-/** « 0:42 » : comme le titre de l'icône dans la barre de menus. */
-export function formatBar(seconds: number): string {
-  const minutes = Math.floor(Math.max(0, seconds) / 60);
-  return `${Math.floor(minutes / 60)}:${pad(minutes % 60)}`;
+/**
+ * « lun. 20 oct. » : le jour de l'en-tête, dans la langue de l'interface. `date` est le jour du
+ * cœur (« AAAA-MM-JJ », lu comme un jour local : un décalage UTC le ferait glisser d'un jour) ;
+ * sans relevé, le jour de l'horloge.
+ */
+export function formatDayHeader(date: string | undefined, language: string): string {
+  const [year, month, day] = (date ?? '').split('-').map(Number);
+  const shown = date ? new Date(year, month - 1, day) : new Date();
+  return new Intl.DateTimeFormat(language, { weekday: 'short', day: 'numeric', month: 'short' }).format(shown);
 }
 
 /** « 13:34 » : l'heure locale d'un instant, en secondes depuis l'époque. */

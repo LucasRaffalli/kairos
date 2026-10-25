@@ -4,7 +4,7 @@
   } @else {
     <k-popover-header [title]="t()('popover.title')" [subtitle]="subtitle()" />
     @if (bannerError(); as error) {
-      <app-error-banner [message]="error.message" [retryable]="store.stale()" (retry)="store.reload()" />
+      <app-error-banner [message]="errorText(error)" [retryable]="store.retryable()" (retry)="store.reload()" />
     }
     @if (store.snapshot()) {
       <!-- Base inaccessible : la dernière vue connue reste, grisée et inerte ; seul le bandeau agit. -->

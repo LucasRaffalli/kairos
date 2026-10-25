@@ -1,10 +1,19 @@
 import { computed, signal } from '@angular/core';
 
-import { emptyForm, canSubmit, lotRequest, toStartRequest, type FormDraft } from '@app/features/popover/logic/form';
+import { emptyForm, canSubmit, lotMatches, lotRequest, toStartRequest, type FormDraft } from '@app/features/popover/logic/form';
 import { isStaleCode } from '@app/features/popover/logic/errors';
 import { pickView, type ViewName } from '@app/features/popover/logic/view';
 
 import { toBridgeError, type BridgeError, type KairosApi, type LotView, type Snapshot, type StartRequest, type SubtaskChoices } from './kairos-api';
+
+/** Les refus d'un écran en retard sur le cœur : la relecture dit si l'action est devenue sans objet. */
+const OUTDATED_SCREEN = new Set(['already_running', 'nothing_running', 'nothing_to_resume']);
+
+/** Les réglages d'une écriture : vient du formulaire (qu'on vide), et le lot qui prouverait qu'elle a déjà eu lieu. */
+interface WriteOptions {
+  fromForm?: boolean;
+  expects?: (running: LotView) => boolean;
+}
 
 /**
  * L'état du popover : le dernier `Snapshot` du cœur, le brouillon du formulaire et l'action en cours.
@@ -22,6 +31,8 @@ export class KairosStore {
   private readonly _quitting = signal(false);
   /** Les puces demandées pour le parent saisi ; `null` : celles du dernier relevé. */
   private readonly _choices = signal<SubtaskChoices | null>(null);
+  /** Le parent dont les puces demandées sont en place ; `undefined` : aucune demande aboutie. */
+  private askedParent: string | null | undefined;
   /** Numéro de la dernière demande de puces : une réponse plus ancienne arrivée après est ignorée. */
   private choicesRequest = 0;
   /** L'heure locale lue au dernier battement, en millisecondes. */
@@ -42,6 +53,8 @@ export class KairosStore {
   readonly stale = this._stale.asReadonly();
   /** Le dialogue « Quitter » est ouvert (demande de quitter alors qu'un lot tourne). */
   readonly quitting = this._quitting.asReadonly();
+  /** « Réessayer » a un sens : la base est en cause, ou il n'y a encore rien à montrer. */
+  readonly retryable = computed(() => this._stale() || this._snapshot() === null);
   /** Le brouillon du formulaire « Lancer » / « Changer de lot ». */
   readonly form = signal<FormDraft>(emptyForm());
 
@@ -125,6 +138,7 @@ export class KairosStore {
   /** Oublie les puces demandées (parent changé, ou plus rien en cours) ; une réponse en route est ignorée. */
   resetChoices(): void {
     this.choicesRequest++;
+    this.askedParent = undefined;
     this._choices.set(null);
   }
 
@@ -135,10 +149,16 @@ export class KairosStore {
       const choices = await this.api.subtaskChoices(parent);
       if (request === this.choicesRequest) {
         this._choices.set(choices);
+        this.askedParent = parent;
       }
     } catch {
       // Sans réponse, on garde les puces affichées : le cœur jugera la sous-tâche au lancement.
     }
+  }
+
+  /** Le parent dont les puces sont en place (`null` : aucun parent) ; `undefined` : à redemander. */
+  get choicesParent(): string | null | undefined {
+    return this.askedParent;
   }
 
   openSwitch(): void {
@@ -152,13 +172,13 @@ export class KairosStore {
   /** Lance le lot du formulaire. Un second appel pendant le premier est ignoré. */
   start(): Promise<void> {
     const request = this.request();
-    return request ? this.write(() => this.api.start(request), true) : Promise.resolve();
+    return request ? this.write(() => this.api.start(request), { fromForm: true, expects: (running) => lotMatches(running, request) }) : Promise.resolve();
   }
 
   /** Arrête le lot en cours et lance celui du formulaire, à la même seconde. */
   switchLot(): Promise<void> {
     const request = this.request();
-    return request ? this.write(() => this.api.switch(request), true) : Promise.resolve();
+    return request ? this.write(() => this.api.switch(request), { fromForm: true }) : Promise.resolve();
   }
 
   /**
@@ -168,7 +188,7 @@ export class KairosStore {
   launchRecent(lot: LotView): Promise<void> {
     const request = lotRequest(lot);
     const idle = (this._snapshot()?.status.state ?? 'idle') === 'idle';
-    return this.write(() => (idle ? this.api.start(request) : this.api.switch(request)));
+    return this.write(() => (idle ? this.api.start(request) : this.api.switch(request)), { expects: (running) => running.id === lot.id });
   }
 
   cancelQuit(): void {
@@ -205,7 +225,7 @@ export class KairosStore {
     return canSubmit(this.form()).ok ? toStartRequest(this.form(), this.now()) : null;
   }
 
-  private async write(action: () => Promise<void>, fromForm = false): Promise<void> {
+  private async write(action: () => Promise<void>, { fromForm = false, expects }: WriteOptions = {}): Promise<void> {
     if (this._busy()) {
       return;
     }
@@ -221,22 +241,30 @@ export class KairosStore {
         this.resetChoices();
       }
     } catch (error) {
-      await this.refused(toBridgeError(error));
+      await this.refused(toBridgeError(error), expects);
     } finally {
       this._busy.set(false);
     }
   }
 
   /**
-   * Un refus du cœur. `already_running` alors que l'écran montre déjà un lot en cours (double clic,
-   * ou lot lancé ailleurs entre-temps) n'est pas une erreur : on relit l'état et on se tait. Le
-   * brouillon est gardé : le lot affiché n'est pas forcément le sien (s'il l'était, le premier
-   * appel réussi l'a déjà vidé), et il sert tel quel à « Changer de lot ».
+   * Un refus du cœur. Quand il vient d'un écran périmé (double clic, lot lancé, arrêté ou repris
+   * ailleurs entre-temps), on relit l'état, et on se tait si la vue a rattrapé la réalité :
+   * `already_running` seulement si le lot en cours est celui qu'on demandait (`expects`), sinon
+   * l'utilisateur croirait son lot démarré ; les autres, si l'état a changé depuis l'écran. Le
+   * brouillon est gardé : il sert tel quel à « Changer de lot ».
    */
-  private async refused(error: BridgeError): Promise<void> {
-    if (error.code === 'already_running') {
+  private async refused(error: BridgeError, expects?: (running: LotView) => boolean): Promise<void> {
+    if (OUTDATED_SCREEN.has(error.code)) {
+      const before = this._snapshot()?.status.state;
       await this.reload();
-      if (this._snapshot()?.status.state === 'running') {
+      // Une relecture en échec a publié sa propre erreur : on ne la remplace pas.
+      if (this._error()) {
+        return;
+      }
+      const status = this._snapshot()?.status;
+      const caughtUp = error.code === 'already_running' ? status?.state === 'running' && (expects?.(status.lot) ?? true) : status?.state !== before;
+      if (caughtUp) {
         return;
       }
     }

@@ -3,12 +3,13 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import { fill } from '@app/lang/fill';
 import { I18nService, injectT } from '@app/lang/i18n.service';
-import { KAIROS_API } from '@app/services/kairos/kairos-api';
+import { KAIROS_API, type BridgeError } from '@app/services/kairos/kairos-api';
 import { KairosStore } from '@app/services/kairos/kairos.store';
 import { PopoverHeader } from '@app/ui';
 
 import { ErrorBanner } from './error-banner';
-import { errorField } from './logic/errors';
+import { formatDayHeader } from './logic/clock';
+import { errorField, errorMessage } from './logic/errors';
 import { lotTitle, quitSummary } from './logic/view';
 import { QuitDialog } from './quit-dialog';
 import { RunningView } from './running-view';
@@ -36,10 +37,11 @@ export class Popover {
 
   private readonly frame = viewChild.required<ElementRef<HTMLElement>>('frame');
 
-  /** « lun. 20 oct. » : la date du jour, dans la langue de l'interface. */
-  private readonly today = computed(() =>
-    new Intl.DateTimeFormat(this.i18n.language(), { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date()),
-  );
+  /**
+   * « lun. 20 oct. » : le jour du cœur, dans la langue de l'interface. Il suit le relevé : le cœur
+   * change de jour à minuit et la surveillance de la base recharge l'état.
+   */
+  private readonly today = computed(() => formatDayHeader(this.store.snapshot()?.today.date, this.i18n.language()));
 
   /** « lun. 20 oct. · 1 lot en cours ». */
   protected readonly subtitle = computed(() => {
@@ -60,6 +62,11 @@ export class Popover {
     const view = this.store.view();
     return view === 'running' || view === 'paused' || errorField(error.code, this.store.form()) === null ? error : null;
   });
+
+  /** Le refus à afficher, dans la langue de l'interface (le message du cœur à défaut de traduction). */
+  protected errorText(error: BridgeError): string {
+    return errorMessage(error, this.t());
+  }
 
   /** Annoncé par les lecteurs d'écran au changement d'état (pas à chaque seconde du chrono). */
   protected readonly liveText = computed(() => {

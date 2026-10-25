@@ -47,6 +47,18 @@ export function toStartRequest(form: FormDraft, nowMs: number): StartRequest {
   };
 }
 
+/**
+ * Le lot en cours est-il celui que `request` demandait ? Sert à savoir si un « déjà en cours » est
+ * le fait d'un double clic (le lot demandé tourne) ou d'un autre lot lancé ailleurs. Une sous-tâche
+ * non précisée correspond à n'importe laquelle (le cœur prend alors le poste principal).
+ */
+export function lotMatches(lot: LotView, request: StartRequest): boolean {
+  const sameParent = request.parent_monday_id ? lot.parent_monday_id === request.parent_monday_id : lot.parent_monday_id === null && lot.name === request.name;
+  return (
+    sameParent && (!request.subtask || lot.subtask === request.subtask) && (!request.subtask_monday_id || lot.subtask_monday_id === request.subtask_monday_id)
+  );
+}
+
 /** Les puces de sous-tâche : le poste principal d'abord, puis le socle et celles du parent, sans doublon. */
 export function subtaskChips(choices: SubtaskChoices): string[] {
   return [...new Set([choices.main, ...choices.base, ...choices.own])];
